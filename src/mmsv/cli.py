@@ -9,6 +9,7 @@ import numpy as np
 import torch
 
 from .aggregation import QueryAttention, mean_pool
+from .anonymization import anonymize_plan, build_anonymization_plan
 from .config import load_config, require_path
 from .data.fisher import build_manifest
 from .data.librispeech import build_librispeech_pool
@@ -101,6 +102,37 @@ def _model_smoke(_: argparse.Namespace) -> None:
     })
 
 
+def _plan_anonymization(args: argparse.Namespace) -> None:
+    config = load_config(args.config)
+    _print(build_anonymization_plan(
+        args.manifest,
+        args.reference_pool,
+        args.output,
+        args.audio_output_root,
+        int(config["seed"]),
+        args.trials,
+        args.limit,
+        args.splits,
+        args.split_name,
+        args.one_per_call_side,
+    ))
+
+
+def _anonymize(args: argparse.Namespace) -> None:
+    _print(anonymize_plan(
+        args.plan,
+        args.output_manifest,
+        args.streamvoice_root,
+        args.streamvoice_config,
+        args.checkpoint,
+        args.sample_rate,
+        args.delay,
+        args.alpha,
+        args.sph2pipe,
+        args.limit,
+    ))
+
+
 def _train(args: argparse.Namespace) -> None:
     _print(train_audio(
         load_config(args.config), args.manifest, args.splits, args.output_dir,
@@ -152,6 +184,36 @@ def build_parser() -> argparse.ArgumentParser:
 
     command = subparsers.add_parser("model-smoke", help="不下载权重的模型 shape/归一化冒烟测试")
     command.set_defaults(func=_model_smoke)
+
+    command = subparsers.add_parser("plan-anonymization", help="生成 Fisher -> clean-360 确定性匿名化计划")
+    command.add_argument("--config", required=True)
+    command.add_argument("--manifest", required=True)
+    command.add_argument("--reference-pool", required=True)
+    command.add_argument("--audio-output-root", required=True)
+    command.add_argument("--output", required=True)
+    command.add_argument("--trials", help="只规划该 trial JSONL 引用的 utterance")
+    command.add_argument("--splits", help="按 speaker split 过滤；不能与 --trials 同时使用")
+    command.add_argument("--split-name", choices=["train", "validation", "evaluation"])
+    command.add_argument(
+        "--one-per-call-side",
+        action="store_true",
+        help="每个 call-side 确定性选择一条 source；用于磁盘受限的 semi-informed 训练",
+    )
+    command.add_argument("--limit", type=int)
+    command.set_defaults(func=_plan_anonymization)
+
+    command = subparsers.add_parser("anonymize-streamvoice", help="按计划运行可断点续跑的 StreamVoiceAnon")
+    command.add_argument("--plan", required=True)
+    command.add_argument("--output-manifest", required=True)
+    command.add_argument("--streamvoice-root", required=True)
+    command.add_argument("--streamvoice-config", default="configs/config_firefly_arvcasr_8192_delay0_8.yaml")
+    command.add_argument("--checkpoint", default="pretrained_checkpoints/dual_ar_delay_0_8.pth")
+    command.add_argument("--sample-rate", type=int, default=16000)
+    command.add_argument("--delay", type=int, default=2)
+    command.add_argument("--alpha", type=float, default=1.0)
+    command.add_argument("--sph2pipe")
+    command.add_argument("--limit", type=int)
+    command.set_defaults(func=_anonymize)
 
     command = subparsers.add_parser("train-audio", help="训练 WavLM-Large + ECAPA-TDNN")
     command.add_argument("--config", required=True)

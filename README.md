@@ -61,6 +61,20 @@ Semi-informed 阶段应重置 optimizer，并只用 lazy 权重初始化（不�
 mmsv train-audio --config configs/semi_local.yaml --manifest artifacts/metadata/fisher_anonymized_manifest.csv --splits artifacts/metadata/speaker_splits.csv --output-dir results/runs/audio_semi --init-from results/runs/audio_lazy/last.pt
 ```
 
+固定范围的匿名化计划与可恢复执行：
+
+```powershell
+# O-A/A-A evaluation：只规划 evaluation trials 引用的 utterance
+mmsv plan-anonymization --config configs/local_fisher_p1.yaml --manifest artifacts/metadata/fisher_manifest.csv --reference-pool artifacts/metadata/librispeech_target_pool.csv --trials artifacts/trials/evaluation.jsonl --audio-output-root artifacts/anonymized/evaluation --output artifacts/anonymization/evaluation_plan.csv
+
+# semi-informed：每个 train call-side 固定选一条 source，覆盖全部训练 speaker
+mmsv plan-anonymization --config configs/local_fisher_p1.yaml --manifest artifacts/metadata/fisher_manifest.csv --reference-pool artifacts/metadata/librispeech_target_pool.csv --splits artifacts/metadata/speaker_splits.csv --split-name train --one-per-call-side --audio-output-root artifacts/anonymized/train --output artifacts/anonymization/train_one_per_call_side_plan.csv
+
+mmsv anonymize-streamvoice --plan artifacts/anonymization/evaluation_plan.csv --output-manifest artifacts/metadata/fisher_anonymized_evaluation_manifest.csv --streamvoice-root third_party/StreamVoiceAnon --delay 2 --alpha 1.0
+```
+
+runner 会跳过已经存在的非空 FLAC、追加 progress JSONL，并将 StreamVoiceAnon 的 44.1 kHz 输出立即转为 16 kHz FLAC。批量匿名化与 O-O 训练不要同时占用 GPU。
+
 训练每 10 个 optimizer step 以及每个 epoch 结束时原子写入 `last.pt`，checkpoint 记录 epoch 内 batch 位置；中断后不会重跑整个 epoch。每个 epoch 尾部不足 gradient accumulation 的 batch 会在校正梯度缩放后正常更新。嵌入与 EER：
 
 checkpoint 只保存可训练的 ECAPA/classifier/optimizer；冻结的 WavLM-Large 从 Hugging Face snapshot 复用，避免每个 checkpoint 重复约 1.2 GB 权重。
