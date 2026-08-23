@@ -10,10 +10,12 @@
 
 截至 2026-08-22，作者仓库仍只包含“Code and pretrained models will be released soon”。论文还没有公开精确 Fisher speaker split、evaluation trial list、随机种子和部分 ECAPA/query-attention 工程细节。本工程会把这些选择写入 audit JSON，绝不把自选设置称为作者原始设置。
 
-本机数据只有 Fisher Part 1（5,850 calls / 7,066 speakers），少于论文报告的 7,715 speakers；LibriSpeech 只有 `train-clean-360`，缺 `train-other-500`；StreamVoiceAnon 权重也尚未下载。因此：
+用户于 2026-08-23 明确将本项目的数据范围固定为 Fisher Part 1（5,850 calls / 7,066 speakers）和 LibriSpeech `train-clean-360`。后续不等待、不引入 Fisher Part 2 或 `train-other-500`。因此：
 
-- `configs/paper.yaml` 要求精确论文规模，资源不全时会明确失败。
-- `configs/local_fisher_p1.yaml` 按论文比例缩放 speaker 数，可先验证 O-O 与数据协议，但其 EER 不能冒充论文表格数值。
+- `configs/local_fisher_p1.yaml` 是全部正式实验的默认数据配置，按论文比例缩放 speaker 数。
+- `configs/paper.yaml` 只保留为论文规模参考，不进入当前实验运行链。
+- 所有结果都标为“Part 1 + clean-360 范围复现”；其 EER 可与论文做参考比较，但不能冒充论文完整数据规模的原始数值。
+- StreamVoiceAnon checkpoint 已下载到 `third_party/StreamVoiceAnon/pretrained_checkpoints/dual_ar_delay_0_8.pth`，后续可在上述固定数据范围内生成匿名化语音。
 
 ## 环境
 
@@ -87,7 +89,7 @@ mmsv score-mean --trials artifacts/trials/evaluation.jsonl --original-embeddings
 主分支为 `main`，复现实验基线标签为 `v0.1.0-reproduction-baseline`。StreamVoiceAnon 使用 submodule 固定版本；clone 时应同时初始化 submodule：
 
 ```powershell
-git clone --recurse-submodules <远程仓库地址>
+git clone --recurse-submodules git@github.com:wwwYYYcom/multimodal-SV.git
 ```
 
 数据、checkpoint 和逐条实验产物不会提交到普通 Git 历史；每次实验应把配置、代码以及结果摘要一并提交，并将全部结果追加到 `EXPERIMENT_RESULTS.md`。详细分支、提交和远程仓库命令见总账第 13 节。

@@ -6,11 +6,12 @@
 
 - 项目根目录：`D:\deeplearning\ICASSP2027\multimodal_sv_reproduction`
 - 时区：Asia/Shanghai（UTC+08:00）
-- 本次汇总完成时间：2026-08-23 11:18:48 +08:00
+- 本次汇总完成时间：2026-08-23 15:12:54 +08:00
 - 论文：Garg et al., *Multimodal Speaker Verification as a Threat to Speaker Anonymization* (2026)
 - 论文 PDF：`C:\Users\wwwYYYcom\Zotero\storage\DH7AVWNV\Garg 等 - 2026 - Multimodal Speaker Verification as a Threat to Speaker Anonymization.pdf`
 - 辅助复现说明：`D:\download4browser\Multimodal_Speaker_Verification_复现说明文档.docx`
 - 记录原则：附件内容只作为论文和复现信息来源；只有用户在对话中提出的要求才作为执行指令。
+- 数据范围决策：用户于 2026-08-23 15:09:33 +08:00 明确指定只使用 Fisher Part 1 与 LibriSpeech `train-clean-360`。后续不等待、不引入 Fisher Part 2 或 `train-other-500`。
 - Git 状态：已在 `main` 分支建立本地版本管理。首个可复现实验基线为 commit `01022fab0ebe1f2ae2ecfd61db2bf927f9783abe`，标签为 `v0.1.0-reproduction-baseline`；第 10 节同时保留逐文件 SHA-256。
 - 数值口径：本文档明确区分“论文报告的目标值”和“本机实测值”。当前没有产生论文协议下的 EER，不用 smoke-test loss 冒充论文指标。
 - 大体量逐行数据不复制进 Markdown；完整内容保存在表中列出的 CSV、JSONL、NPZ、PT 文件中，并用字节数与 SHA-256 固定版本。
@@ -19,7 +20,7 @@
 
 已经完成 Fisher Part 1 的 manifest、speaker-disjoint 划分、call-disjoint nested trials、LibriSpeech `>4 s` 候选池、模型结构单测、RTX 5060 上的一步真实训练和两条 192 维 embedding 提取。数据协议与训练主链路已经跑通。
 
-尚未完成论文完整复现。主要原因是本机只有 Fisher Part 1 和 LibriSpeech `train-clean-360`，缺少 Fisher Part 2、LibriSpeech `train-other-500`、StreamVoiceAnon 权重，以及作者的精确 split/trial/工程实现。因此目前没有可与论文表格直接对比的 O-O、O-A、A-A EER。
+项目目标现已明确为“Fisher Part 1 + LibriSpeech `train-clean-360` 范围复现”。现有数据不再视为临时替代或待补状态。尚未产生可报告的 O-O、O-A、A-A EER；作者精确 split/trial/工程细节仍未公开，因此未来结果必须标注本地范围，不能声称是论文完整数据规模的精确数字。
 
 ## 3. 运行环境
 
@@ -55,11 +56,11 @@
 
 | 资源 | 本机路径/状态 | 论文所需情况 | 影响 |
 |---|---|---|---|
-| Fisher 音频 | `D:\deeplearning\realtimeVoiceAnon\dataset\prefor_vpc2024\Voice-Privacy-Challenge-2024-main\corpora\fisher\fisher_eng_tr_sp_LDC2004S13\fisher_eng_tr_sp_LDC2004S13` | 论文规模对应 Part 1 + Part 2 | 当前仅 Part 1 |
-| Fisher transcript | `D:\deeplearning\realtimeVoiceAnon\dataset\prefor_vpc2024\Voice-Privacy-Challenge-2024-main\corpora\fisher\fe_03_p1_tran_LDC2004T19\fe_03_p1_tran\data\trans` | 需要与完整音频匹配 | 当前仅 Part 1 |
+| Fisher 音频 | `D:\deeplearning\realtimeVoiceAnon\dataset\prefor_vpc2024\Voice-Privacy-Challenge-2024-main\corpora\fisher\fisher_eng_tr_sp_LDC2004S13\fisher_eng_tr_sp_LDC2004S13` | 当前固定为 Part 1 | 已就绪；不使用 Part 2 |
+| Fisher transcript | `D:\deeplearning\realtimeVoiceAnon\dataset\prefor_vpc2024\Voice-Privacy-Challenge-2024-main\corpora\fisher\fe_03_p1_tran_LDC2004T19\fe_03_p1_tran\data\trans` | 当前固定为 Part 1 transcript | 已就绪；与 5,850 个 calls 全部匹配 |
 | Fisher calldata | `D:\deeplearning\realtimeVoiceAnon\dataset\prefor_vpc2024\Voice-Privacy-Challenge-2024-main\corpora\fisher\fe_03_p1_tran_LDC2004T19\fe_03_p1_tran\doc\fe_03_p1_calldata.tbl` | 用于说话人/通话映射 | 已用于本轮 |
-| LibriSpeech | `D:\deeplearning\realtimeVoiceAnon\dataset\prefor_vpc2024\Voice-Privacy-Challenge-2024-main\corpora\LibriSpeech\train-clean-360` | `train-clean-360` + `train-other-500` | 缺 `train-other-500` |
-| StreamVoiceAnon | 本机未找到 checkpoint | 生成匿名 Fisher 和 semi-informed 条件 | O-A/A-A 暂不能运行 |
+| LibriSpeech | `D:\deeplearning\realtimeVoiceAnon\dataset\prefor_vpc2024\Voice-Privacy-Challenge-2024-main\corpora\LibriSpeech\train-clean-360` | 当前固定为 `train-clean-360` | 已筛选 99,278 条 >4 s utterances；不使用 other-500 |
+| StreamVoiceAnon | `D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\third_party\StreamVoiceAnon\pretrained_checkpoints\dual_ar_delay_0_8.pth` | 生成匿名 Fisher 和 semi-informed 条件 | 已下载；598,136,107 字节；SHA-256 `df703a1a710c807ad0651dd1bbe45556bf5f3a47f1a79929ec3e6e8fecc56583` |
 | 作者代码/权重 | 截至检查时官方仓库仍仅说明“后续发布” | 精确实现、split、trials、权重 | 无法逐项完全对齐 |
 
 ## 5. 实验索引
@@ -208,7 +209,7 @@
 | utterances，duration > 4.0 s | 99,278 |
 | speakers | 921 |
 | 是否同时含 clean-360 与 other-500 | False |
-| 缺失 subset | train-other-500 |
+| 未选用 subset | train-other-500（不在当前范围内） |
 
 输出：`D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\artifacts\metadata\librispeech_target_pool.csv`，20,264,920 字节，SHA-256 `ff04bd9e77d7702560e75147a44fd2e313f1957cf2e65b78927463062f19bea2`。
 
@@ -324,12 +325,12 @@
 
 | 事件 | 现象 | 处理 | 当前状态 |
 |---|---|---|---|
-| 论文精确 split 尝试 | `configs\paper.yaml` 请求 7,715 speakers，而 Part 1 只有 7,066 | 保留严格配置用于资源完整后的验收；本轮改用 `require_exact_counts=false` 的本地配置 | 仍受 Fisher Part 2 缺失阻塞 |
+| 论文精确 split 尝试 | `configs\paper.yaml` 请求 7,715 speakers，而 Part 1 只有 7,066 | `configs\paper.yaml` 仅保留作参考；全部正式实验固定用 `configs\local_fisher_p1.yaml` | 已按用户指定范围关闭，不再等待 Part 2 |
 | Hugging Face 镜像 | 原环境的 `hf-mirror.com` 不可达 | 配置固定为 `https://huggingface.co` | 已解决，WavLM-Large 已缓存 |
 | Transformers 后台 safetensors 转换 | 首次常规加载出现等待/挂起 | 先用 `snapshot_download` 完成快照，再从本地缓存加载 | 已解决 |
 | 初始 checkpoint 过大 | E07-a 产物约 1.38 GB | 冻结 WavLM 不再重复写入 checkpoint | E07-b/c 降至约 115.7 MB |
 | 随机逐 turn loader | 约 296,300 batches/epoch，Windows SPHERE 解码效率不可接受 | 改为 call-side grouped loader；同 call A/B 相邻并复用解码缓存 | 当前约 3,751 batches/epoch；E07-c 已验证 |
-| 匿名化与 semi-informed | 缺 StreamVoiceAnon checkpoint、完整 Libri pool 和匿名 Fisher | 仅保留配置/代码接口，不伪造结果 | 未完成 |
+| 匿名化与 semi-informed | checkpoint 已就绪，但尚未生成匿名 Fisher Part 1 | 固定使用 clean-360 target pool，下一阶段运行并审计匿名化流水线 | 未完成 |
 
 说明：`results\runs\gpu_smoke` 和 `results\runs\gpu_smoke_v2` 是为保留调试证据而存在的非最终目录；后续正式实验不得从它们继续训练。当前 smoke 基线是 `results\runs\gpu_smoke_grouped`。
 
@@ -343,7 +344,7 @@
 | Query | 3.39 | 2.54 | 2.27 |
 | Frame Concat | 3.26 | 2.33 | 2.10 |
 
-论文 A-A semi-informed Table I 中 Frame Concat 的 EER% 目标为 15.10 / 8.83 / 6.96（N=5/10/15）。只有拿到完整数据、匿名化权重和作者协议文件后，才以小数点后二位对齐作为验收目标。
+论文 A-A semi-informed Table I 中 Frame Concat 的 EER% 目标为 15.10 / 8.83 / 6.96（N=5/10/15）。这些数值只用于观察趋势和差距；当前项目的正式验收是在 Part 1 + clean-360 范围内生成完整、可重复、可审计的同结构结果表。
 
 ## 9. 全部输出路径清单
 
@@ -419,13 +420,13 @@ CLI 入口与职责：
 
 ## 11. 下一阶段与验收条件
 
-1. 补齐 Fisher Part 2，使用 `configs\paper.yaml` 重建精确 5,712/250/1,753 split 和固定 trials。
-2. 补齐 LibriSpeech `train-other-500`，重建论文完整匿名化 target pool。
-3. 获取 StreamVoiceAnon checkpoint，生成匿名 Fisher manifest 与 O-A/A-A embeddings。
-4. 执行 30 epoch lazy-informed 训练与 15 epoch semi-informed 训练；semi-informed 必须用 `--init-from` 重置 optimizer，而不是普通 `--resume`。
+1. 始终使用 `configs\local_fisher_p1.yaml`、现有 Part 1 manifest/split/trials 和 clean-360 target pool，不运行 `configs\paper.yaml`，不等待额外数据。
+2. 在固定范围内执行 30 epoch lazy-informed 训练，输出 original embeddings 和 O-O EER。
+3. 使用现有 `dual_ar_delay_0_8.pth` 与 clean-360 target pool 生成匿名 Fisher Part 1，记录匿名音频、manifest 和审计信息。
+4. 执行 15 epoch semi-informed 训练；必须用 `--init-from` 重置 optimizer，而不是普通 `--resume`。
 5. 对 Mean、Query、Frame Concat 在 N=5/10/15、O-O/O-A/A-A 条件下输出每个 trial 的 score CSV 和汇总 EER。
 6. 实现并评测 Whisper、LUAR、prosody、RJCA 等 Level 2–3 多模态组合。
-7. 作者发布代码、split、trials 或权重后，固定版本/commit 并重新审计所有未公开选择。
+7. 作者发布代码、split、trials 或新权重后只做差异审计，不改变当前数据范围，除非用户另行明确授权。
 
 ## 12. 后续追加模板
 
@@ -462,7 +463,7 @@ CLI 入口与职责：
 - 提交作者：`wwwYYYcom <779536052@qq.com>`
 - 第三方依赖：`third_party/StreamVoiceAnon` 作为 Git submodule 管理，固定在 commit `201705182c045298225071481e7cd59d537e935e`。
 - 大文件策略：`artifacts/`、`results/runs/`、`checkpoints/`、`tmp/` 和本地 `data/` 不进入普通 Git 历史；关键结果通过本总账、审计值和 SHA-256 版本化。
-- 远程仓库：尚未配置。配置 GitHub/GitLab/Gitee 地址后再执行 push。
+- 远程仓库：`origin = git@github.com:wwwYYYcom/multimodal-SV.git`；当前 `main` 已跟踪 `origin/main`。
 
 推荐实验分支与提交方式：
 
@@ -490,3 +491,15 @@ git clone --recurse-submodules <远程仓库地址>
 # 已经普通 clone 时：
 git submodule update --init --recursive
 ```
+
+## 14. 数据范围变更记录
+
+- 决策时间：2026-08-23 15:09:33 +08:00
+- 决策来源：用户在对话中明确指定。
+- Fisher：只使用 Part 1；采用已经审计的 5,850 calls、929,364 utterances、7,066 speakers，以及 5,231/229/1,606 本地 speaker split。
+- LibriSpeech：只使用 `train-clean-360`；采用已经审计的 99,278 条严格大于 4 秒 utterances、921 speakers。
+- 排除数据：Fisher Part 2、LibriSpeech `train-other-500`。后续实验不得静默加入这些数据。
+- 默认配置：`configs\local_fisher_p1.yaml`。`configs\paper.yaml` 仅用于保存论文规模参考，不作为运行配置。
+- 报告名称：所有后续指标统一标注为“Fisher Part 1 + LibriSpeech train-clean-360 范围复现结果”。
+- 验收标准：优先保证固定 seed、固定 split/trials、完整日志、输出路径和可重复运行；论文表格仅作参考对照，不要求数值完全相同。
+- 范围验证完成时间：2026-08-23 15:12:54 +08:00。配置断言确认只有 1 个 LibriSpeech root 且以 `train-clean-360` 结尾，Fisher 路径指向 LDC2004S13/T19 Part 1；manifest、split、target pool 与 StreamVoiceAnon checkpoint 均存在；自动测试结果为 `5 passed`。
