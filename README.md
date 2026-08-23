@@ -43,6 +43,14 @@ mmsv build-trials --config configs/local_fisher_p1.yaml --manifest artifacts/met
 mmsv model-smoke
 ```
 
+Windows 上正式训练前，先把 30 个 epoch 确定会抽到的 Fisher utterance 缓存成短 FLAC，避免每个 batch 重复解码整通 SPHERE：
+
+```powershell
+& 'D:\codeAPP\anaconda3\envs\pytorch\python.exe' -u scripts/build_fisher_training_cache.py --config configs/local_fisher_p1.yaml --manifest artifacts/metadata/fisher_manifest.csv --splits artifacts/metadata/speaker_splits.csv --output-dir artifacts/cache/fisher_train_selected_30e
+```
+
+脚本支持重复执行并跳过非空缓存文件；只有生成 `audit.json` 后才视为缓存完整。`configs/local_fisher_p1.yaml` 中的 `segment_cache_dir` 会强制训练使用完整缓存，缺少任一片段时立即报错。
+
 短训练验证（下载 WavLM-Large 后，只执行 1 个 optimizer step）：
 
 ```powershell
@@ -81,7 +89,7 @@ runner 会跳过已经存在的非空 FLAC、追加 progress JSONL，并将 Stre
 
 checkpoint 只保存可训练的 ECAPA/classifier/optimizer；冻结的 WavLM-Large 从 Hugging Face snapshot 复用，避免每个 checkpoint 重复约 1.2 GB 权重。
 
-Windows 的 `desphere` 需要先解整通 Shorten call。训练 loader 因而按 call-side 组织，每个 epoch 每侧确定性抽一条 turn，并让同一 call 的 A/B 相邻以复用缓存；这是论文未公开采样细节下的本工程选择，已在状态文档中标明。若安装 `sph2pipe`，可按片段直接解码。
+Windows 的 `desphere` 需要先解整通 Shorten call。训练 loader 因而按 call-side 组织，每个 epoch 每侧确定性抽一条 turn，并让同一 call 的 A/B 相邻；正式运行进一步读取上述短 FLAC 缓存。这是论文未公开采样细节下的本工程选择，已在状态文档中标明。若安装 `sph2pipe`，也可按片段直接解码。
 
 ```powershell
 mmsv extract-embeddings --checkpoint results/runs/audio_lazy/last.pt --manifest artifacts/metadata/fisher_manifest.csv --trials artifacts/trials/evaluation.jsonl --output artifacts/embeddings/original.npz

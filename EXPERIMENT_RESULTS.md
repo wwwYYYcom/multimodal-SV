@@ -6,7 +6,7 @@
 
 - 项目根目录：`D:\deeplearning\ICASSP2027\multimodal_sv_reproduction`
 - 时区：Asia/Shanghai（UTC+08:00）
-- 本次汇总完成时间：2026-08-23 15:54:03 +08:00
+- 本次汇总完成时间：2026-08-23 22:42:00 +08:00
 - 论文：Garg et al., *Multimodal Speaker Verification as a Threat to Speaker Anonymization* (2026)
 - 论文 PDF：`C:\Users\wwwYYYcom\Zotero\storage\DH7AVWNV\Garg 等 - 2026 - Multimodal Speaker Verification as a Threat to Speaker Anonymization.pdf`
 - 辅助复现说明：`D:\download4browser\Multimodal_Speaker_Verification_复现说明文档.docx`
@@ -642,3 +642,47 @@ git submodule update --init --recursive
 - 报告名称：所有后续指标统一标注为“Fisher Part 1 + LibriSpeech train-clean-360 范围复现结果”。
 - 验收标准：优先保证固定 seed、固定 split/trials、完整日志、输出路径和可重复运行；论文表格仅作参考对照，不要求数值完全相同。
 - 范围验证完成时间：2026-08-23 15:12:54 +08:00。配置断言确认只有 1 个 LibriSpeech root 且以 `train-clean-360` 结尾，Fisher 路径指向 LDC2004S13/T19 Part 1；manifest、split、target pool 与 StreamVoiceAnon checkpoint 均存在；当时自动测试结果为 `5 passed`，最近完整测试已增至 `10 passed`。
+
+## 15. GPU 利用率诊断与训练供数优化
+
+### E18：并行 DataLoader 诊断与断点基准
+
+- 状态：完成；正式训练已从验证后的原子 checkpoint 继续推进。
+- 诊断时间：2026-08-23 22:22:33 至 22:23:17 +08:00。
+- 旧训练进程：PID `78368`，开始于 2026-08-23 15:37:16 +08:00；安全停止于 step 390 检查点之后。
+- 连续 GPU 采样：30 秒内峰值 `95%`、最低 `0%`、平均约 `10.3%`；显存稳定为约 `3,081 MiB`。同一时段磁盘占用约 `1%–5%`，CPU 总占用约 `14%–30%`。
+- 根因：`num_workers=0` 使 GPU 等待 CPU；无 `sph2pipe` 时 `desphere` 必须先解码整通 Fisher Shorten/SPHERE，再截取一个短 turn。batch size 2 又使 GPU 计算脉冲较短。
+- step 390 checkpoint：`epoch=3`、`epoch_complete=false`、`batch_in_epoch=1536/3636`、`global_step=390`、`running_loss=22904.411051750183`。
+- 并行设置：`num_workers=2`、`prefetch_factor=2`、`pin_memory=true`；未使用 4 workers，因为当时系统可用物理内存仅约 4 GB。
+- 基准命令：
+
+```powershell
+& 'D:\codeAPP\anaconda3\envs\pytorch\python.exe' -u -m mmsv.cli train-audio --config configs/local_fisher_p1.yaml --manifest artifacts/metadata/fisher_manifest.csv --splits artifacts/metadata/speaker_splits.csv --output-dir results/runs/loader_prefetch_smoke --resume results/runs/audio_lazy_p1_v2/last.pt --max-steps 391
+```
+
+- 基准数据：worker 初次启动约 10 秒；随后 31 个 batch 约 23 秒，稳态约 `0.74 s/batch`，旧日志约 `1.8 s/batch`，局部吞吐约 `2.4×`。正式恢复后的含波动均值约 `1.06 s/batch`，相对旧训练约 `1.7×`。
+- 优化后 30 秒 GPU 采样：平均 `15.17%`、峰值 `96%`；GPU 仍受整通 SPHERE 解码限制，因此继续执行 E19。
+- 基准输出：`D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\results\runs\loader_prefetch_smoke\last.pt` 与 `train.jsonl`。
+- 代码提交：`f3f0782d85c5d47651b4ff1e7098791205ca73bd`（`perf: prefetch Fisher training batches`）。
+
+### E19：Fisher 确定性训练片段缓存
+
+- 状态：进行中；缓存完成后自动恢复正式训练。
+- step 400 切换时间：2026-08-23 22:40:06 +08:00。
+- 正式断点：`epoch=3`、`epoch_complete=false`、`batch_in_epoch=1856/3636`、`global_step=400`、`running_loss=27661.14385318756`。
+- 缓存开始时间：2026-08-23 22:40:26 +08:00。
+- 缓存监督进程：PID `38272`。
+- 目的：只缓存固定 seed 1234 下 30 epoch 会抽到的 Fisher Part 1 utterance，保存为 16 kHz FLAC/PCM16；不复制整通电话，不引入 Fisher Part 2 或其他数据集。
+- 缓存输出：`D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\artifacts\cache\fisher_train_selected_30e`；完整后生成 `audit.json`，其中记录完成时间、耗时、unique utterance 数、生成/跳过数、manifest/split SHA-256。
+- 运行命令：
+
+```powershell
+& 'D:\codeAPP\anaconda3\envs\pytorch\python.exe' -u scripts/build_fisher_training_cache.py --config configs/local_fisher_p1.yaml --manifest artifacts/metadata/fisher_manifest.csv --splits artifacts/metadata/speaker_splits.csv --output-dir artifacts/cache/fisher_train_selected_30e
+```
+
+- 自动恢复脚本：`scripts\build_cache_then_resume.ps1`。它仅在 `audit.json` 完整性校验通过后启动训练，并重新启动 `scripts\run_o_o_after_training.ps1`。
+- 当前日志：`results\runs\audio_lazy_p1_v2\cache_supervisor.stdout.log`、`cache_supervisor.stderr.log`；恢复后日志为 `process_cached.stdout.log`、`process_cached.stderr.log` 和 `post_pipeline_cached.*.log`。
+- 缓存进行中快照（2026-08-23 22:41:08 +08:00）：701 个 FLAC、31,627,661 字节；这是进度值，不是最终审计值。
+- 自动测试：`11 passed`。
+- 代码提交：`39ed207b80371e4b28de8b11a9ee9f19d537e1cb`（`perf: cache selected Fisher training segments`）。
+- 关键代码指纹：`src\mmsv\train.py` 18,598 字节，SHA-256 `fd4dd476dfc14511eb400326bc7d4ca1fd95839789523b1fc21dfdef8b02b2db`；`scripts\build_fisher_training_cache.py` 3,580 字节，SHA-256 `6f056136cc040bb7f75ebe38dd2f3fe3d5039baae34714504218f46b5e785384`；`scripts\build_cache_then_resume.ps1` 2,631 字节，SHA-256 `c50a29e51818af2a34ac8ee470fa04f46f8dacfb008fe512c39b4aee942c8b27`；配置 SHA-256 `0c09778b24037b18e0d6f84d8f1abcd797b1e8e653350251e8851b6d17f965d3`。
