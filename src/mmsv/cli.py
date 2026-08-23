@@ -108,7 +108,13 @@ def _train(args: argparse.Namespace) -> None:
 
 def _extract(args: argparse.Namespace) -> None:
     _print(extract_embeddings(
-        args.checkpoint, args.manifest, args.output, args.sample_rate, args.sph2pipe, args.limit
+        args.checkpoint,
+        args.manifest,
+        args.output,
+        args.sample_rate,
+        args.sph2pipe,
+        args.limit,
+        args.trials,
     ))
 
 
@@ -166,6 +172,10 @@ def build_parser() -> argparse.ArgumentParser:
     command.add_argument("--sample-rate", type=int, default=16000)
     command.add_argument("--sph2pipe")
     command.add_argument("--limit", type=int)
+    command.add_argument(
+        "--trials",
+        help="只提取该 JSONL trial 文件引用的 utterance；正式评测推荐使用",
+    )
     command.set_defaults(func=_extract)
 
     command = subparsers.add_parser("score-mean", help="按 O-O/O-A/A-A 条件计算 mean pooling EER")

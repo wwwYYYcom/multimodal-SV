@@ -61,16 +61,18 @@ Semi-informed 阶段应重置 optimizer，并只用 lazy 权重初始化（不�
 mmsv train-audio --config configs/semi_local.yaml --manifest artifacts/metadata/fisher_anonymized_manifest.csv --splits artifacts/metadata/speaker_splits.csv --output-dir results/runs/audio_semi --init-from results/runs/audio_lazy/last.pt
 ```
 
-每个 epoch 会原子写入 `last.pt`，并追加 `train.jsonl`。嵌入与 EER：
+训练每 10 个 optimizer step 以及每个 epoch 结束时原子写入 `last.pt`，checkpoint 记录 epoch 内 batch 位置；中断后不会重跑整个 epoch。每个 epoch 尾部不足 gradient accumulation 的 batch 会在校正梯度缩放后正常更新。嵌入与 EER：
 
 checkpoint 只保存可训练的 ECAPA/classifier/optimizer；冻结的 WavLM-Large 从 Hugging Face snapshot 复用，避免每个 checkpoint 重复约 1.2 GB 权重。
 
 Windows 的 `desphere` 需要先解整通 Shorten call。训练 loader 因而按 call-side 组织，每个 epoch 每侧确定性抽一条 turn，并让同一 call 的 A/B 相邻以复用缓存；这是论文未公开采样细节下的本工程选择，已在状态文档中标明。若安装 `sph2pipe`，可按片段直接解码。
 
 ```powershell
-mmsv extract-embeddings --checkpoint results/runs/audio_lazy/last.pt --manifest artifacts/metadata/fisher_manifest.csv --output artifacts/embeddings/original.npz
+mmsv extract-embeddings --checkpoint results/runs/audio_lazy/last.pt --manifest artifacts/metadata/fisher_manifest.csv --trials artifacts/trials/evaluation.jsonl --output artifacts/embeddings/original.npz
 mmsv score-mean --trials artifacts/trials/evaluation.jsonl --original-embeddings artifacts/embeddings/original.npz --condition O-O --n 5 --output results/o_o_mean_n5.csv
 ```
+
+`--trials` 会只提取固定 trial 实际引用的 utterance，避免对 929,364 条 manifest 全量重复推理。
 
 ## 论文协议已编码的约束
 

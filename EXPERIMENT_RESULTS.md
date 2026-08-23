@@ -71,12 +71,13 @@
 | E02 | Speaker-disjoint split | 本地兼容规模完成 | 2026-08-22 23:17:19 | train/val/eval = 5,231/229/1,606；三者不相交 | `artifacts\metadata\speaker_splits.csv` |
 | E03 | Evaluation nested trials | 完成 | 2026-08-22 23:40:07 | 1,605 target + 1,605 nontarget；N=5/10/15 | `artifacts\trials\evaluation.jsonl` |
 | E04 | LibriSpeech target pool | 部分资源下完成 | 2026-08-22 23:19:40 | 99,278 utterances；921 speakers；仅 clean-360 | `artifacts\metadata\librispeech_target_pool.csv` |
-| E05 | 单元测试 | 完成 | 2026-08-23 11:14:02 | 5 passed | 控制台；测试代码见第 10 节 |
+| E05 | 单元测试 | 完成 | 2026-08-23 15:20:59 | 7 passed | 控制台；测试代码见第 10 节 |
 | E06 | 无权重模型结构 smoke | 完成 | 2026-08-23 11:14:56 | ECAPA/query/mean 均输出 `[2,24]`；已归一化 | 控制台记录见 6.5 |
 | E07-a | GPU 一步训练，初始调试 | 完成、非最终 | 2026-08-22 23:30:27 | loss 18.033920；4.604990 s | `results\runs\gpu_smoke` |
 | E07-b | GPU 一步训练，精简 checkpoint | 完成、非最终 | 2026-08-22 23:36:36 | loss 18.474255；3.126842 s | `results\runs\gpu_smoke_v2` |
 | E07-c | GPU 一步训练，grouped loader | 完成、当前有效 smoke | 2026-08-22 23:41:29 | loss 17.303108；2.033191 s | `results\runs\gpu_smoke_grouped` |
 | E08 | 两条 embedding 提取 | 完成 | 2026-08-22 23:42:05 | shape `[2,192]`；L2 norm 约为 1 | `artifacts\embeddings\gpu_smoke_2.npz` |
+| E10 | epoch 内 checkpoint/resume GPU smoke | 完成 | 2026-08-23 15:21:58 | 同一 epoch 从 step 1/batch 1 恢复到 step 2/batch 2 | `results\runs\checkpoint_resume_smoke` |
 | E09 | 论文 EER 评测 | 未运行 | — | 没有 EER 数据 | 等待完整训练/匿名数据 |
 
 ## 6. 实验详情
@@ -221,9 +222,9 @@
 & 'D:\codeAPP\anaconda3\envs\pytorch\python.exe' -m pytest -q
 ```
 
-完成时间：2026-08-23 11:14:02 +08:00。结果：`5 passed`。
+最近完成时间：2026-08-23 15:20:59 +08:00。结果：`7 passed`。
 
-覆盖文件：`tests\test_fisher.py`、`tests\test_metrics.py`、`tests\test_models.py`、`tests\test_protocol.py`。
+覆盖文件：`tests\test_fisher.py`、`tests\test_metrics.py`、`tests\test_models.py`、`tests\test_protocol.py`、`tests\test_train.py`。
 
 模型结构 smoke 命令：
 
@@ -306,7 +307,49 @@
 
 完整 384 个浮点数保存在 `D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\artifacts\embeddings\gpu_smoke_2.npz`。文件 1,907 字节，SHA-256 `7fa7f74b1bf5a0cc2e9fb4699ae4708983bb0848520aaf0c88f6e6ea0ae83ba2`。
 
-### 6.8 E09：EER 评测状态
+### 6.8 E10：epoch 内 checkpoint/resume GPU smoke
+
+- 目的：验证正式长训练能够在 epoch 内从精确 batch 位置恢复，并验证 partial gradient accumulation 的校正逻辑。
+- 配置：`configs\gpu_smoke.yaml`，`checkpoint_interval_steps=1`。
+- 运行代码：`src\mmsv\train.py`、`src\mmsv\cli.py`。
+- 完成时间：2026-08-23 15:21:58 +08:00。
+
+第一段：
+
+```powershell
+& 'D:\codeAPP\anaconda3\envs\pytorch\python.exe' -m mmsv.cli train-audio `
+  --config configs/gpu_smoke.yaml `
+  --manifest artifacts/metadata/fisher_manifest.csv `
+  --splits artifacts/metadata/speaker_splits.csv `
+  --output-dir results/runs/checkpoint_resume_smoke `
+  --max-steps 1
+```
+
+第二段：
+
+```powershell
+& 'D:\codeAPP\anaconda3\envs\pytorch\python.exe' -m mmsv.cli train-audio `
+  --config configs/gpu_smoke.yaml `
+  --manifest artifacts/metadata/fisher_manifest.csv `
+  --splits artifacts/metadata/speaker_splits.csv `
+  --output-dir results/runs/checkpoint_resume_smoke `
+  --resume results/runs/checkpoint_resume_smoke/last.pt `
+  --max-steps 2
+```
+
+| 阶段 | epoch | epoch_complete | batch_in_epoch | global_step | 累计平均 loss |
+|---|---:|---|---:|---:|---:|
+| 第一段结束 | 0 | False | 1 | 1 | 17.30310821533203 |
+| 恢复后结束 | 0 | False | 2 | 2 | 16.064202308654785 |
+
+最终 checkpoint 中 `running_loss=32.12840461730957`，证明第二段保留并继续累计第一段的 loss，而不是从新 epoch 重启。自动测试还验证了旧 checkpoint 的兼容恢复和不足 accumulation 时的梯度重缩放。
+
+| 文件 | 字节数 | SHA-256 |
+|---|---:|---|
+| `D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\results\runs\checkpoint_resume_smoke\train.jsonl` | 619 | `9990abbca20aeec4dfa433320fa992ac18e0c1bf2c02016e8bb14a90b4592532` |
+| `D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\results\runs\checkpoint_resume_smoke\last.pt` | 115,736,643 | `e7411a1c686a8baf852e1a7111d4d478ea90f859352393d88383dae4aae2dc3a` |
+
+### 6.9 E09：EER 评测状态
 
 尚未运行可报告的论文 EER。`src\mmsv\metrics.py` 和 `src\mmsv\multimodal.py` 已实现 cosine/EER 与 mean/query/frame 聚合路径，CLI 已提供 `score-mean`，但一步 smoke checkpoint 不能代表训练完成的 ASV 模型；匿名化语音也尚未生成。因此结果栏必须保持空缺，不能填入论文数字或 smoke loss。
 
@@ -330,6 +373,7 @@
 | Transformers 后台 safetensors 转换 | 首次常规加载出现等待/挂起 | 先用 `snapshot_download` 完成快照，再从本地缓存加载 | 已解决 |
 | 初始 checkpoint 过大 | E07-a 产物约 1.38 GB | 冻结 WavLM 不再重复写入 checkpoint | E07-b/c 降至约 115.7 MB |
 | 随机逐 turn loader | 约 296,300 batches/epoch，Windows SPHERE 解码效率不可接受 | 改为 call-side grouped loader；同 call A/B 相邻并复用解码缓存 | 当前约 3,751 batches/epoch；E07-c 已验证 |
+| epoch 内恢复与尾部梯度 | 旧实现只在 epoch 末保存，且尾部不足 32 batches 的梯度会跨 epoch 残留 | 每 10 optimizer steps 保存 batch/running-loss 状态；尾部梯度按实际累计数校正后更新 | E10 两段式 GPU 恢复与自动测试已通过 |
 | 匿名化与 semi-informed | checkpoint 已就绪，但尚未生成匿名 Fisher Part 1 | 固定使用 clean-360 target pool，下一阶段运行并审计匿名化流水线 | 未完成 |
 
 说明：`results\runs\gpu_smoke` 和 `results\runs\gpu_smoke_v2` 是为保留调试证据而存在的非最终目录；后续正式实验不得从它们继续训练。当前 smoke 基线是 `results\runs\gpu_smoke_grouped`。
@@ -370,6 +414,8 @@ D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\results\runs\gpu_smoke\tra
 D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\results\runs\gpu_smoke\last.pt
 D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\results\runs\gpu_smoke_v2\train.jsonl
 D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\results\runs\gpu_smoke_v2\last.pt
+D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\results\runs\checkpoint_resume_smoke\train.jsonl
+D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\results\runs\checkpoint_resume_smoke\last.pt
 ```
 
 ## 10. 使用的运行代码、配置与版本指纹
@@ -396,10 +442,10 @@ CLI 入口与职责：
 | 文件 | 字节数 | SHA-256 |
 |---|---:|---|
 | `pyproject.toml` | 808 | `ad200b4473eded7e4c93c9ed9c7849e3131284f1e1d6e7d9e4ac7fb52166aa6c` |
-| `configs\paper.yaml` | 1,311 | `51b2e2271b170ff12835fbd26d68a0938dbefd7c7c05c5d21b760a3af065c82f` |
-| `configs\local_fisher_p1.yaml` | 1,514 | `36739f8b1c949c16190c9b360a9f27ddf70da64dde2a2099e814f95c79031afa` |
-| `configs\gpu_smoke.yaml` | 482 | `b35222164eb9185f8f1a25931e2f300707b8016adf385b774a829dba6d53893a` |
-| `configs\semi_local.yaml` | 469 | `edaa97bf7d9f85652899bff41ec86dddb8aafb3fc48da2e716adc9602bc49ffd` |
+| `configs\paper.yaml` | 1,343 | `273c3038239d6b95327163b421817b617fc32536e008b434b0be6d5452f05ae1` |
+| `configs\local_fisher_p1.yaml` | 1,546 | `59372a28b1eeb9e52e79cf2b2cea5732a8ee2940796c8dbb44ec3dbdf8dad83f` |
+| `configs\gpu_smoke.yaml` | 513 | `2047b85139bba5f4482bdc57421621bb7981a3e5b3269b9bd80f03fc1152155b` |
+| `configs\semi_local.yaml` | 500 | `cdecb1389ecb1f0ee8d07cf069f10dfca07a3677efaa84508ba25706a8f48ae7` |
 | `src\mmsv\__init__.py` | 89 | `d1f4a61fa0b2491a3fc25e5975d11b7e92a71edb35a682ef46c84bdb770e1d82` |
 | `src\mmsv\config.py` | 803 | `d175a20a350ffe3c3bb3c19b7c01a48973c4fd622bee62cdb8b1f6d83019bf4b` |
 | `src\mmsv\data\fisher.py` | 6,122 | `9e07adc7be42d10ed8a41405f9d71d1d8ccd4b3f5197ccfe239fdf998ab10ccb` |
@@ -410,13 +456,14 @@ CLI 入口与职责：
 | `src\mmsv\aggregation.py` | 2,128 | `c17fe1ac00b0813b368444e32d63451c4112fcd4db2fc1d453e6c58a715c9b64` |
 | `src\mmsv\models.py` | 10,475 | `a7c9a589c9edc28d861ce8494eed6e0a41559cbf57ec71c5106bd25278d2ea43` |
 | `src\mmsv\metrics.py` | 4,593 | `0c6da0d5ef0f2a2a22e407c6d05e8dfbe715f20240f81fda0db69698468680e0` |
-| `src\mmsv\train.py` | 11,656 | `9d99996dd3f2bc7193b17387589b614a6e2732196a98c35315d0ccf97b68d166` |
+| `src\mmsv\train.py` | 16,644 | `fe12190116e37bbb7a0e726451869c777667b4ea4018c8ea9a76c49e18014da2` |
 | `src\mmsv\multimodal.py` | 4,247 | `9d169e24eb85c8a2f8d05c5603cda48de5a68857850d4e52849324a1dc09549f` |
-| `src\mmsv\cli.py` | 7,329 | `ec0454968a1e765daa2cd871b597b81f481f5e2ea22e31828c7cbb1b916f9ac8` |
+| `src\mmsv\cli.py` | 7,537 | `b6bb47b4ab70cfea0c06bacedc8a29a5a32e0aa10f8651fa2380276be87bf659` |
 | `tests\test_fisher.py` | 923 | `16e0573a4937dca2ab4c5e307130aad1ba1571a63979c2177258c62fe5c66d12` |
 | `tests\test_metrics.py` | 321 | `fd8ee0ef0db2dd4fbd43bbdbed73b77d660e24dfd41ae518a3641149ab01e131` |
 | `tests\test_models.py` | 1,360 | `aae35a4b447286e8e2893c5515c861d47df1e35f034a42d28cbc01efce892540` |
 | `tests\test_protocol.py` | 742 | `86321640621ae72005c3e454638c3cda607a1d4dda94f09b38083ae8a95f6c52` |
+| `tests\test_train.py` | 782 | `136e9599bea2ff87cffc36f582759c341dd4dc5181dd225bfbb6d6e7491a1c8d` |
 
 ## 11. 下一阶段与验收条件
 

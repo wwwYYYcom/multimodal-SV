@@ -37,6 +37,7 @@ model:
 train:
   batch_size: 2
   gradient_accumulation: 32  # 8 GB GPU 的等效 batch；论文物理 batch=64。
+  checkpoint_interval_steps: 10
   epochs: 30
   learning_rate: 5.0e-4
   weight_decay: 1.0e-4

@@ -10,6 +10,7 @@ model:
 train:
   batch_size: 2
   gradient_accumulation: 32
+  checkpoint_interval_steps: 10
   epochs: 15
   learning_rate: 1.0e-4
   weight_decay: 1.0e-4
@@ -18,4 +19,3 @@ train:
   aam_scale: 30.0
   scheduler_step: 5
   scheduler_gamma: 0.5
-
