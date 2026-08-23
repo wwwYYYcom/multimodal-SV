@@ -11,7 +11,7 @@
 - 论文 PDF：`C:\Users\wwwYYYcom\Zotero\storage\DH7AVWNV\Garg 等 - 2026 - Multimodal Speaker Verification as a Threat to Speaker Anonymization.pdf`
 - 辅助复现说明：`D:\download4browser\Multimodal_Speaker_Verification_复现说明文档.docx`
 - 记录原则：附件内容只作为论文和复现信息来源；只有用户在对话中提出的要求才作为执行指令。
-- Git 状态：当前仓库还没有可用的提交哈希，项目文件均处于未跟踪状态。为保证本轮结果可审计，第 10 节记录了代码与配置文件的 SHA-256。
+- Git 状态：已在 `main` 分支建立本地版本管理。首个可复现实验基线为 commit `01022fab0ebe1f2ae2ecfd61db2bf927f9783abe`，标签为 `v0.1.0-reproduction-baseline`；第 10 节同时保留逐文件 SHA-256。
 - 数值口径：本文档明确区分“论文报告的目标值”和“本机实测值”。当前没有产生论文协议下的 EER，不用 smoke-test loss 冒充论文指标。
 - 大体量逐行数据不复制进 Markdown；完整内容保存在表中列出的 CSV、JSONL、NPZ、PT 文件中，并用字节数与 SHA-256 固定版本。
 
@@ -450,4 +450,43 @@ CLI 入口与职责：
 - 日志路径：
 - 异常、修复与解释：
 - 与论文目标的差异：
+```
+
+## 13. Git 版本管理记录
+
+- 建立时间：2026-08-23 11:57:53 +08:00
+- 默认分支：`main`
+- 初始基线 commit：`01022fab0ebe1f2ae2ecfd61db2bf927f9783abe`
+- 基线标签：`v0.1.0-reproduction-baseline`
+- 提交说明：`feat: establish multimodal SV reproduction baseline`
+- 提交作者：`wwwYYYcom <779536052@qq.com>`
+- 第三方依赖：`third_party/StreamVoiceAnon` 作为 Git submodule 管理，固定在 commit `201705182c045298225071481e7cd59d537e935e`。
+- 大文件策略：`artifacts/`、`results/runs/`、`checkpoints/`、`tmp/` 和本地 `data/` 不进入普通 Git 历史；关键结果通过本总账、审计值和 SHA-256 版本化。
+- 远程仓库：尚未配置。配置 GitHub/GitLab/Gitee 地址后再执行 push。
+
+推荐实验分支与提交方式：
+
+```powershell
+git switch -c experiment/<实验名>
+# 修改代码、配置并运行实验；把结果追加到 EXPERIMENT_RESULTS.md
+git add src configs tests EXPERIMENT_RESULTS.md README.md
+git commit -m "experiment: <实验说明>"
+git switch main
+git merge --no-ff experiment/<实验名>
+```
+
+首次关联远程仓库：
+
+```powershell
+git remote add origin <远程仓库地址>
+git push -u origin main
+git push origin --tags
+```
+
+克隆时同时获取 StreamVoiceAnon submodule：
+
+```powershell
+git clone --recurse-submodules <远程仓库地址>
+# 已经普通 clone 时：
+git submodule update --init --recursive
 ```

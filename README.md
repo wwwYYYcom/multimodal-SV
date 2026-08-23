@@ -81,3 +81,13 @@ mmsv score-mean --trials artifacts/trials/evaluation.jsonl --original-embeddings
 - ECAPA 暴露 ASP 前 frame map，可实现真正的 frame concatenation。
 
 全部实验命令、完成时间、实测数据、产物绝对路径与 SHA-256 统一记录在 [EXPERIMENT_RESULTS.md](EXPERIMENT_RESULTS.md)。简要状态和缺失资源见 [REPRODUCTION_STATUS.md](REPRODUCTION_STATUS.md)。
+
+## Git 版本管理
+
+主分支为 `main`，复现实验基线标签为 `v0.1.0-reproduction-baseline`。StreamVoiceAnon 使用 submodule 固定版本；clone 时应同时初始化 submodule：
+
+```powershell
+git clone --recurse-submodules <远程仓库地址>
+```
+
+数据、checkpoint 和逐条实验产物不会提交到普通 Git 历史；每次实验应把配置、代码以及结果摘要一并提交，并将全部结果追加到 `EXPERIMENT_RESULTS.md`。详细分支、提交和远程仓库命令见总账第 13 节。
