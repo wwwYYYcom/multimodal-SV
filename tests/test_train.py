@@ -1,6 +1,15 @@
 import torch
 
-from mmsv.train import _optimizer_step, _resume_position
+from mmsv.train import FisherTrainingDataset, _optimizer_step, _resume_position
+
+
+def test_segment_cache_path_is_stable_and_sharded(tmp_path):
+    first = FisherTrainingDataset.cache_path(tmp_path, "fe_03_00001_A_0001")
+    second = FisherTrainingDataset.cache_path(tmp_path, "fe_03_00001_A_0001")
+    assert first == second
+    assert first.parent.parent == tmp_path
+    assert len(first.parent.name) == 2
+    assert first.name == "fe_03_00001_A_0001.flac"
 
 
 def test_resume_position_supports_legacy_and_mid_epoch_checkpoints():

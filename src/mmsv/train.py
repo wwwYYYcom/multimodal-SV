@@ -14,7 +14,7 @@ import torch
 from torch.utils.data import DataLoader, Dataset, Subset
 from tqdm import tqdm
 
-from .audio import crop_or_pad, read_segment
+from .audio import crop_or_pad, read_audio, read_segment
 from .data.fisher import read_manifest
 from .models import AAMSoftmaxLoss, WavLMECAPA
 
@@ -34,6 +34,7 @@ class FisherTrainingDataset(Dataset[tuple[torch.Tensor, int]]):
         crop_seconds: float,
         seed: int,
         sph2pipe: str | None,
+        segment_cache_dir: str | Path | None = None,
     ):
         split_for = _read_split_map(split_path)
         rows = [
@@ -61,6 +62,9 @@ class FisherTrainingDataset(Dataset[tuple[torch.Tensor, int]]):
         self.seed = seed
         self.epoch = 0
         self.sph2pipe = sph2pipe
+        self.segment_cache_dir = (
+            Path(segment_cache_dir).expanduser().resolve() if segment_cache_dir else None
+        )
 
     def __len__(self) -> int:
         return len(self.groups)
@@ -68,11 +72,34 @@ class FisherTrainingDataset(Dataset[tuple[torch.Tensor, int]]):
     def set_epoch(self, epoch: int) -> None:
         self.epoch = int(epoch)
 
+    def selected_row(self, index: int, epoch: int | None = None) -> dict[str, str]:
+        selected_epoch = self.epoch if epoch is None else int(epoch)
+        group = self.groups[index]
+        rng = random.Random(self.seed + selected_epoch * 1_000_003 + index)
+        return group[rng.randrange(len(group))]
+
+    @staticmethod
+    def cache_path(root: str | Path, utt_id: str) -> Path:
+        import hashlib
+
+        shard = hashlib.sha1(utt_id.encode("utf-8")).hexdigest()[:2]
+        return Path(root) / shard / f"{utt_id}.flac"
+
     def __getitem__(self, index: int) -> tuple[torch.Tensor, int]:
         group = self.groups[index]
         rng = random.Random(self.seed + self.epoch * 1_000_003 + index)
         row = group[rng.randrange(len(group))]
-        waveform = read_segment(row, self.sample_rate, self.sph2pipe)
+        if self.segment_cache_dir is None:
+            waveform = read_segment(row, self.sample_rate, self.sph2pipe)
+        else:
+            cache_path = self.cache_path(self.segment_cache_dir, row["utt_id"])
+            if not cache_path.is_file():
+                raise FileNotFoundError(f"训练片段缓存缺失: {cache_path}")
+            waveform, sample_rate = read_audio(cache_path)
+            if sample_rate != self.sample_rate:
+                raise ValueError(
+                    f"训练片段缓存采样率错误: {cache_path} ({sample_rate} != {self.sample_rate})"
+                )
         start = rng.randrange(max(1, waveform.size - self.crop_samples + 1))
         waveform = crop_or_pad(waveform, self.crop_samples, start)
         return torch.from_numpy(waveform), self.speaker_to_index[row["speaker_id"]]
@@ -179,6 +206,7 @@ def train_audio(
         float(config["crop_seconds"]),
         seed,
         sph2pipe,
+        train_settings.get("segment_cache_dir"),
     )
     batch_size = int(train_settings["batch_size"])
     batches_in_epoch = len(dataset) // batch_size

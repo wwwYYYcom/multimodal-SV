@@ -37,8 +37,9 @@ model:
 train:
   batch_size: 2
   gradient_accumulation: 32
-  # 两个 worker 并行解码 Fisher SPHERE；本机当前可用内存较少，暂不设为 4。
-  num_workers: 2
+  # 缓存完成后只需一个 worker 预取短 FLAC，避免 Windows worker 复制占用过多内存。
+  segment_cache_dir: artifacts/cache/fisher_train_selected_30e
+  num_workers: 1
   prefetch_factor: 2
   pin_memory: true
   checkpoint_interval_steps: 10
