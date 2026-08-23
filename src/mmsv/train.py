@@ -236,6 +236,11 @@ def train_audio(
     log_path = output_path / "train.jsonl"
     accumulation = int(train_settings["gradient_accumulation"])
     checkpoint_interval = int(train_settings.get("checkpoint_interval_steps", 10))
+    num_workers = int(train_settings.get("num_workers", 0))
+    prefetch_factor = int(train_settings.get("prefetch_factor", 2))
+    pin_memory = bool(train_settings.get("pin_memory", device.type == "cuda"))
+    if num_workers < 0 or prefetch_factor < 1:
+        raise ValueError("num_workers 必须非负，prefetch_factor 必须为正整数")
     if accumulation < 1 or checkpoint_interval < 1:
         raise ValueError("gradient_accumulation 和 checkpoint_interval_steps 必须为正整数")
     optimizer.zero_grad(set_to_none=True)
@@ -250,13 +255,20 @@ def train_audio(
             raise ValueError(f"checkpoint batch_in_epoch 越界: {first_batch}/{batches_in_epoch}")
         first_item = first_batch * batch_size
         epoch_dataset = Subset(dataset, range(first_item, len(dataset)))
-        loader = DataLoader(
-            epoch_dataset,
-            batch_size=batch_size,
-            shuffle=False,
-            num_workers=0,
-            drop_last=True,
-        )
+        loader_kwargs: dict[str, Any] = {
+            "dataset": epoch_dataset,
+            "batch_size": batch_size,
+            "shuffle": False,
+            "num_workers": num_workers,
+            "pin_memory": pin_memory,
+            "drop_last": True,
+        }
+        if num_workers:
+            loader_kwargs.update(
+                prefetch_factor=prefetch_factor,
+                persistent_workers=True,
+            )
+        loader = DataLoader(**loader_kwargs)
         progress = tqdm(loader, desc=f"epoch {epoch + 1}", unit="batch", dynamic_ncols=True)
         running_loss = resumed_running_loss if epoch == start_epoch else 0.0
         epoch_started = time.time()
