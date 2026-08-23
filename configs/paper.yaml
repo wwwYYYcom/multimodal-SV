@@ -1,0 +1,57 @@
+seed: 1234  # 论文未公开随机种子；这是本复现工程的固定选择。
+sample_rate: 16000
+crop_seconds: 4.0
+
+data:
+  fisher_audio_root: null
+  fisher_transcript_root: null
+  fisher_calldata: null
+  librispeech_roots:
+    - null  # train-clean-360
+    - null  # train-other-500
+  min_segment_seconds: 1.0
+
+split:
+  train_speakers: 5712
+  validation_speakers: 250
+  evaluation_speakers: 1753
+  require_exact_counts: true
+  evaluation_min_calls: 2
+  max_n: 15
+
+trials:
+  n_values: [5, 10, 15]
+  validation_target_per_speaker: 100
+  validation_nontarget_per_speaker: 100
+  evaluation_target_per_speaker: 1  # 正文未公开 eval trial 数；获得官方列表后替换。
+  evaluation_nontarget_per_speaker: 1
+
+model:
+  wavlm_name: microsoft/wavlm-large
+  hf_endpoint: https://huggingface.co
+  wavlm_frozen: true
+  embedding_dim: 192
+  query_heads: 4
+  query_temperature: 0.3
+
+train:
+  batch_size: 2
+  gradient_accumulation: 32  # 8 GB GPU 的等效 batch；论文物理 batch=64。
+  epochs: 30
+  learning_rate: 5.0e-4
+  weight_decay: 1.0e-4
+  gradient_clip: 1.0
+  aam_margin: 0.2
+  aam_scale: 30.0
+  scheduler_step: 5
+  scheduler_gamma: 0.5
+
+semi_informed:
+  epochs: 15
+  learning_rate: 1.0e-4
+
+anonymization:
+  delay_frames: 2
+  alpha: 1.0
+  mapping: per_utterance_random
+  target_min_seconds: 4.0

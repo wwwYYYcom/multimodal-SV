@@ -1,0 +1,21 @@
+# Semi-informed：用 anonymized Fisher train，配合 --init-from lazy checkpoint。
+seed: 1234
+sample_rate: 16000
+crop_seconds: 4.0
+model:
+  wavlm_name: microsoft/wavlm-large
+  hf_endpoint: https://huggingface.co
+  wavlm_frozen: true
+  embedding_dim: 192
+train:
+  batch_size: 2
+  gradient_accumulation: 32
+  epochs: 15
+  learning_rate: 1.0e-4
+  weight_decay: 1.0e-4
+  gradient_clip: 1.0
+  aam_margin: 0.2
+  aam_scale: 30.0
+  scheduler_step: 5
+  scheduler_gamma: 0.5
+
