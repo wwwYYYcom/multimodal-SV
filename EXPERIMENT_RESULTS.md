@@ -6,7 +6,7 @@
 
 - 项目根目录：`D:\deeplearning\ICASSP2027\multimodal_sv_reproduction`
 - 时区：Asia/Shanghai（UTC+08:00）
-- 本次汇总完成时间：2026-08-23 15:49:54 +08:00
+- 本次汇总完成时间：2026-08-23 15:53:23 +08:00
 - 论文：Garg et al., *Multimodal Speaker Verification as a Threat to Speaker Anonymization* (2026)
 - 论文 PDF：`C:\Users\wwwYYYcom\Zotero\storage\DH7AVWNV\Garg 等 - 2026 - Multimodal Speaker Verification as a Threat to Speaker Anonymization.pdf`
 - 辅助复现说明：`D:\download4browser\Multimodal_Speaker_Verification_复现说明文档.docx`
@@ -414,6 +414,8 @@ O-O 正式训练 v2 于 2026-08-23 15:37:16 +08:00 启动，PID `78368`，代码
 
 首次中途 checkpoint 于 2026-08-23 15:48:40 +08:00 成功原子落盘：epoch 0、`epoch_complete=false`、batch 320/3636、global step 10、running loss 5,177.040755271912、累计平均 loss 16.17825236。`last.pt` 当时为 115,737,923 字节，SHA-256 `89a3ec058c98ea72e6fb2b0142ba545a7c50dc872029295e0a0a9c2ac6aac4a3`。说明：`last.pt` 会被后续 step checkpoint 原子替换，该哈希只标识 step-10 快照时刻。
 
+训练结束后的自动衔接由 `scripts\run_o_o_after_training.ps1` 执行。watcher 必须验证 checkpoint 为 epoch 29 且 `epoch_complete=true`，否则拒绝评测；验证通过后只提取 evaluation trials 引用的 utterances，并依次生成 `artifacts\embeddings\original_evaluation.npz`、`results\o_o\mean_n5.csv`、`mean_n10.csv`、`mean_n15.csv` 及对应 metrics JSON。watcher 自身只生成机器结果，完成后仍需把指标和 SHA-256 追加到本总账。
+
 Evaluation 匿名化计划：
 
 | 字段 | 值 |
@@ -522,6 +524,7 @@ CLI 入口与职责：
 | `src\mmsv\train.py` | 训练、checkpoint、embedding 提取 |
 | `src\mmsv\multimodal.py` | O-O/O-A/A-A 多 utterance 评分 |
 | `src\mmsv\anonymization.py` | 确定性匿名化计划、StreamVoiceAnon runner、FLAC/manifest/progress |
+| `scripts\run_o_o_after_training.ps1` | 等待完整训练、校验最终 checkpoint、自动提取 embeddings 与 Mean O-O EER |
 
 本轮源文件 SHA-256：
 
@@ -552,6 +555,7 @@ CLI 入口与职责：
 | `tests\test_protocol.py` | 2,536 | `13d5a3de3bbe58a4e3c4490b3fbf598443e463d8a8a213194e3582d608020184` |
 | `tests\test_train.py` | 782 | `136e9599bea2ff87cffc36f582759c341dd4dc5181dd225bfbb6d6e7491a1c8d` |
 | `tests\test_anonymization.py` | 4,054 | `b19d097076fb542449c3db09130d28d56d2433795daf283a0e21b64bfd9481d1` |
+| `scripts\run_o_o_after_training.ps1` | 2,352 | `209f9efdcfe9a0688e31bf6779ccce58d0e3db96dcf52134184f2e3a54e067c1` |
 
 ## 11. 下一阶段与验收条件
 
