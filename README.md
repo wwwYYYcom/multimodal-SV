@@ -76,7 +76,7 @@ mmsv score-mean --trials artifacts/trials/evaluation.jsonl --original-embeddings
 
 ## 论文协议已编码的约束
 
-- speaker-disjoint train/validation/evaluation；evaluation speaker 至少 2 calls。
+- speaker-disjoint train/validation/evaluation；validation 和 evaluation speaker 均须能构造 call-disjoint `N=15` 双侧 trial。
 - enrollment/target 按 call 分池，没有 call 泄漏。
 - `N={5,10,15}` 使用一次 max-N 采样再切前缀，严格满足 `U5 subset U10 subset U15`。
 - O-O / O-A / A-A 可复用同一 trial identity composition。

@@ -17,6 +17,7 @@ split:
   evaluation_speakers: 1753
   require_exact_counts: true
   evaluation_min_calls: 2
+  validation_min_calls: 2
   max_n: 15
 
 trials:

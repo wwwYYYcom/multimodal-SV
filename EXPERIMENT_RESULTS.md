@@ -6,7 +6,7 @@
 
 - 项目根目录：`D:\deeplearning\ICASSP2027\multimodal_sv_reproduction`
 - 时区：Asia/Shanghai（UTC+08:00）
-- 本次汇总完成时间：2026-08-23 15:12:54 +08:00
+- 本次汇总完成时间：2026-08-23 15:36:43 +08:00
 - 论文：Garg et al., *Multimodal Speaker Verification as a Threat to Speaker Anonymization* (2026)
 - 论文 PDF：`C:\Users\wwwYYYcom\Zotero\storage\DH7AVWNV\Garg 等 - 2026 - Multimodal Speaker Verification as a Threat to Speaker Anonymization.pdf`
 - 辅助复现说明：`D:\download4browser\Multimodal_Speaker_Verification_复现说明文档.docx`
@@ -68,16 +68,20 @@
 | ID | 实验 | 状态 | 完成时间（UTC+08:00） | 核心实测结果 | 主要输出 |
 |---|---|---|---|---|---|
 | E01 | Fisher Part 1 manifest | 完成 | 2026-08-22 23:17:05 | 5,850 calls；929,364 utterances；7,066 speakers | `artifacts\metadata\fisher_manifest.csv` |
-| E02 | Speaker-disjoint split | 本地兼容规模完成 | 2026-08-22 23:17:19 | train/val/eval = 5,231/229/1,606；三者不相交 | `artifacts\metadata\speaker_splits.csv` |
-| E03 | Evaluation nested trials | 完成 | 2026-08-22 23:40:07 | 1,605 target + 1,605 nontarget；N=5/10/15 | `artifacts\trials\evaluation.jsonl` |
+| E02 | Trial-capable speaker-disjoint split | 完成、替代旧 split | 2026-08-23 15:34:07 | train/val/eval = 5,231/229/1,606；val/eval 均满足 call-disjoint N=15 | `artifacts\metadata\speaker_splits.csv` |
+| E03 | Evaluation nested trials | 完成、已重建 | 2026-08-23 15:34:21 | 1,606 target + 1,606 nontarget；0 speaker 剔除 | `artifacts\trials\evaluation.jsonl` |
+| E11 | Validation nested trials | 完成 | 2026-08-23 15:34:12 | 22,900 target + 22,900 nontarget；229/229 speakers | `artifacts\trials\validation.jsonl` |
 | E04 | LibriSpeech target pool | 部分资源下完成 | 2026-08-22 23:19:40 | 99,278 utterances；921 speakers；仅 clean-360 | `artifacts\metadata\librispeech_target_pool.csv` |
-| E05 | 单元测试 | 完成 | 2026-08-23 15:20:59 | 7 passed | 控制台；测试代码见第 10 节 |
+| E05 | 单元测试 | 完成 | 2026-08-23 15:33:47 | 8 passed | 控制台；测试代码见第 10 节 |
 | E06 | 无权重模型结构 smoke | 完成 | 2026-08-23 11:14:56 | ECAPA/query/mean 均输出 `[2,24]`；已归一化 | 控制台记录见 6.5 |
 | E07-a | GPU 一步训练，初始调试 | 完成、非最终 | 2026-08-22 23:30:27 | loss 18.033920；4.604990 s | `results\runs\gpu_smoke` |
 | E07-b | GPU 一步训练，精简 checkpoint | 完成、非最终 | 2026-08-22 23:36:36 | loss 18.474255；3.126842 s | `results\runs\gpu_smoke_v2` |
 | E07-c | GPU 一步训练，grouped loader | 完成、当前有效 smoke | 2026-08-22 23:41:29 | loss 17.303108；2.033191 s | `results\runs\gpu_smoke_grouped` |
 | E08 | 两条 embedding 提取 | 完成 | 2026-08-22 23:42:05 | shape `[2,192]`；L2 norm 约为 1 | `artifacts\embeddings\gpu_smoke_2.npz` |
 | E10 | epoch 内 checkpoint/resume GPU smoke | 完成 | 2026-08-23 15:21:58 | 同一 epoch 从 step 1/batch 1 恢复到 step 2/batch 2 | `results\runs\checkpoint_resume_smoke` |
+| E12 | 首次 O-O 正式训练启动 | 主动中止、结果弃用 | 2026-08-23 15:32:29 | 到 batch 267、step 8；发现 validation split 协议问题，无 checkpoint | `results\runs\audio_lazy_p1\process.stderr.log` |
+| E13 | StreamVoiceAnon 配套权重准备 | 完成 | 2026-08-23 15:28:42 | 5/5 权重大小与 SHA-256 已审计 | `third_party\StreamVoiceAnon\pretrained_checkpoints` |
+| E14 | StreamVoiceAnon CPU smoke | 部分完成 | 2026-08-23 15:31 | 模型初始化完全通过；生成因上游 FP16/FP32 KV cache mismatch 失败 | 无音频输出 |
 | E09 | 论文 EER 评测 | 未运行 | — | 没有 EER 数据 | 等待完整训练/匿名数据 |
 
 ## 6. 实验详情
@@ -123,7 +127,7 @@
 - 种子来源：复现工程自行固定；论文未公开。
 - 配置：`configs\local_fisher_p1.yaml`，`require_exact_counts=false`。
 - 运行代码：`src\mmsv\cli.py`、`src\mmsv\config.py`、`src\mmsv\data\splits.py`
-- 完成时间：2026-08-22 23:17:19 +08:00
+- 完成时间：2026-08-23 15:34:07 +08:00。2026-08-22 版本因 validation 未强制 trial capacity 而被替代，旧哈希仅保留在 Git 历史和本总账早期版本中。
 
 ```powershell
 & 'D:\codeAPP\anaconda3\envs\pytorch\python.exe' -m mmsv.cli split-speakers `
@@ -140,7 +144,10 @@
 | validation speakers | 250 | 229 |
 | evaluation speakers | 1,753 | 1,606 |
 | evaluation_min_calls | 2 | 2 |
-| evaluation_candidates | — | 3,302 |
+| validation_min_calls | 2 | 2 |
+| trial_max_n | 15 | 15 |
+| evaluation_candidates | — | 3,301 |
+| validation_candidates | — | 3,301 |
 | split disjoint | True | True |
 
 请求总数 7,715，大于本机 Part 1 的 7,066 个 speaker，因此不能生成论文精确规模。这里按论文比例缩放并明确标为本地兼容 split。
@@ -149,15 +156,15 @@
 
 | 文件 | 字节数 | SHA-256 |
 |---|---:|---|
-| `D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\artifacts\metadata\speaker_splits.csv` | 137,401 | `0fd8f12f5e05cd0d55c28485769da842b21ac0ccbd51824c21d568c0d9b386ff` |
-| `D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\artifacts\metadata\speaker_splits.audit.json` | 523 | `de22367a65331458305ace658f9797e165f977f29c764f6e645ec2192145a810` |
+| `D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\artifacts\metadata\speaker_splits.csv` | 137,401 | `9dd0c24d47aeb94ca453b35a76d755976d504f86fde0abdcaf284919fb34f0fc` |
+| `D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\artifacts\metadata\speaker_splits.audit.json` | 609 | `fd250974bfd21f27f664c69d2a5dd7994337b25ba241df02eea49985b9653c35` |
 
 ### 6.3 E03：Evaluation nested trials
 
 - 目的：为每个合格 evaluation speaker 建立 target/nontarget trial；enrollment 与 target 按 call 分池，避免 call 泄漏；从一次 max-N 抽样中截取 N=5/10/15，满足嵌套关系。
 - 配置：`configs\local_fisher_p1.yaml`
 - 运行代码：`src\mmsv\cli.py`、`src\mmsv\data\trials.py`
-- 完成时间：2026-08-22 23:40:07 +08:00
+- 完成时间：2026-08-23 15:34:21 +08:00。旧 evaluation trials（1,605 + 1,605）已被 trial-capable split 生成的新版本替代。
 
 ```powershell
 & 'D:\codeAPP\anaconda3\envs\pytorch\python.exe' -m mmsv.cli build-trials `
@@ -176,18 +183,27 @@
 | n_values | 5, 10, 15 |
 | nested_sampling | True |
 | call_disjoint_pools | True |
-| eligible_speakers | 1,605 |
-| ineligible_speakers | 1 |
-| target trials | 1,605 |
-| nontarget trials | 1,605 |
-| trials 合计 | 3,210 |
+| eligible_speakers | 1,606 |
+| ineligible_speakers | 0 |
+| target trials | 1,606 |
+| nontarget trials | 1,606 |
+| trials 合计 | 3,212 |
 
 输出：
 
 | 文件 | 字节数 | SHA-256 |
 |---|---:|---|
-| `D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\artifacts\trials\evaluation.jsonl` | 2,590,963 | `69529d37299b19f875a42ddf5ef07b1e8d5e1779c8a34a44a2c5822e43437276` |
-| `D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\artifacts\trials\evaluation.audit.json` | 368 | `816d1e317fa6c71aa80e0dd2256836db47eb1f723b0d7bca578645a2e36b89dd` |
+| `D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\artifacts\trials\evaluation.jsonl` | 2,592,387 | `e41c457d31be96a1a2f0fa66af67a553e1007a925ea077153fd4994f5e9646d2` |
+| `D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\artifacts\trials\evaluation.audit.json` | 368 | `3bb6d3babb84558cd3494f6828dcdd08d0ee37802a72c66569bf66b851351e3b` |
+
+### 6.3.1 E11：Validation nested trials
+
+- 第一次诊断运行：旧 split 仅 68/229 speakers 合格，生成 6,800 target + 6,800 nontarget；该结果于发现协议问题后立即废弃。
+- 修复：split 阶段同时为 validation/evaluation 预留能构造 call-disjoint `max_n=15` 双侧池的 speakers。
+- 最终完成时间：2026-08-23 15:34:12 +08:00。
+- 最终结果：229 eligible、0 ineligible、22,900 target、22,900 nontarget，共 45,800 trials。
+- 输出：`D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\artifacts\trials\validation.jsonl`，36,966,714 字节，SHA-256 `c706f5b85bf277b8bd316b441145f6e2b67d346e1257bdb5b032020a298a4a3e`。
+- 审计：`D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\artifacts\trials\validation.audit.json`，369 字节，SHA-256 `8568be7006139bb0d92cdd54f05aca135685bfcdca2ad87bf454c7668b121afb`。
 
 ### 6.4 E04：LibriSpeech 匿名化 target pool
 
@@ -222,7 +238,7 @@
 & 'D:\codeAPP\anaconda3\envs\pytorch\python.exe' -m pytest -q
 ```
 
-最近完成时间：2026-08-23 15:20:59 +08:00。结果：`7 passed`。
+最近完成时间：2026-08-23 15:33:47 +08:00。结果：`8 passed`。
 
 覆盖文件：`tests\test_fisher.py`、`tests\test_metrics.py`、`tests\test_models.py`、`tests\test_protocol.py`、`tests\test_train.py`。
 
@@ -364,6 +380,31 @@
   --output results/o_o_mean_n5.csv
 ```
 
+### 6.10 E12：首次正式训练启动后主动中止
+
+- 启动时间：2026-08-23 15:24:06 +08:00。
+- 中止时间：2026-08-23 15:32:29 +08:00。
+- 固定代码：commit `9afd8dbac22fbeced36ab86c171271635eadb65e`。
+- 进展：epoch 0，batch 267/3751，global step 8，最近累计平均 loss 16.2868。
+- 输出日志：`D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\results\runs\audio_lazy_p1\process.stderr.log`。
+- checkpoint/train.jsonl：均未生成，因为尚未达到 step 10 的首次中途保存点。
+- 中止原因：validation trial 审计发现旧 speaker split 只有 68/229 speakers 可构造 call-disjoint N=15 trials。继续训练会使用协议不完整的 split，因此主动终止并重建 split/trials。
+- 结果口径：此运行全部结果弃用，不用于后续恢复或 EER。
+
+### 6.11 E13/E14：StreamVoiceAnon 权重与 CPU smoke
+
+5 个官方权重全部就绪：
+
+| 文件 | 完成时间 | 字节数 | SHA-256 |
+|---|---|---:|---|
+| `dual_ar_delay_0_8.pth` | 2026-08-23 11:46:11 | 598,136,107 | `df703a1a710c807ad0651dd1bbe45556bf5f3a47f1a79929ec3e6e8fecc56583` |
+| `campplus_cn_common.bin` | 2026-08-23 15:25:58 | 28,036,335 | `3388cf5fd3493c9ac9c69851d8e7a8badcfb4f3dc631020c4961371646d5ada8` |
+| `asr_s2s_bsq_8192_causal_down_whisper.pth` | 2026-08-23 15:27:08 | 618,561,748 | `dd02fc319d66216159693f6523ebbc4262afd43f41630de70599cf77f99b159e` |
+| `firefly-gan-vq-fsq-8x1024-21hz-generator.pth` | 2026-08-23 15:28:31 | 188,518,579 | `01b81dbf753224a156c3fe139b88bf0b9a0f54b11bee864f95e66511c3ccd754` |
+| `spark_speaker_encoder.pth` | 2026-08-23 15:28:42 | 56,378,895 | `84adb871ada3c41ac54b8c4897b88c2ed80962937e283437f9a392980ffd3483` |
+
+Hugging Face SDK 因当前代理返回异常 HEAD 元数据而失败；改用官方 `resolve/main` URL、curl 重试和逐文件大小校验后完成。离线 `InferenceWrapper` 在 CPU 上初始化成功，speech tokenizer 与主模型均报告空 missing/unexpected keys。实际 7.13 秒测试音频生成失败，错误为 KV cache destination Half、source Float；这是官方 CPU 路径的 dtype 限制。为避免修改 third-party submodule，待 O-O 训练产生 checkpoint 后释放 GPU，再执行官方 GPU 路径 smoke。
+
 ## 7. 失败尝试、工程修复与保留证据
 
 | 事件 | 现象 | 处理 | 当前状态 |
@@ -374,6 +415,8 @@
 | 初始 checkpoint 过大 | E07-a 产物约 1.38 GB | 冻结 WavLM 不再重复写入 checkpoint | E07-b/c 降至约 115.7 MB |
 | 随机逐 turn loader | 约 296,300 batches/epoch，Windows SPHERE 解码效率不可接受 | 改为 call-side grouped loader；同 call A/B 相邻并复用解码缓存 | 当前约 3,751 batches/epoch；E07-c 已验证 |
 | epoch 内恢复与尾部梯度 | 旧实现只在 epoch 末保存，且尾部不足 32 batches 的梯度会跨 epoch 残留 | 每 10 optimizer steps 保存 batch/running-loss 状态；尾部梯度按实际累计数校正后更新 | E10 两段式 GPU 恢复与自动测试已通过 |
+| validation speaker 容量 | 旧 split 随机抽 validation，只有 68/229 可构造双侧 N=15 trials | split 阶段联合预留 trial-capable validation/evaluation speakers | val 229/229、eval 1606/1606 合格；旧正式训练已主动中止 |
+| StreamVoiceAnon CPU 生成 | 官方 KV cache 固定 FP16，CPU source tensor 为 FP32 | 不修改 submodule；权重/初始化已审计，稍后在 GPU 路径 smoke | CPU 无音频输出；错误已记录 |
 | 匿名化与 semi-informed | checkpoint 已就绪，但尚未生成匿名 Fisher Part 1 | 固定使用 clean-360 target pool，下一阶段运行并审计匿名化流水线 | 未完成 |
 
 说明：`results\runs\gpu_smoke` 和 `results\runs\gpu_smoke_v2` 是为保留调试证据而存在的非最终目录；后续正式实验不得从它们继续训练。当前 smoke 基线是 `results\runs\gpu_smoke_grouped`。
@@ -402,6 +445,8 @@ D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\artifacts\metadata\speaker
 D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\artifacts\metadata\librispeech_target_pool.csv
 D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\artifacts\trials\evaluation.jsonl
 D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\artifacts\trials\evaluation.audit.json
+D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\artifacts\trials\validation.jsonl
+D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\artifacts\trials\validation.audit.json
 D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\results\runs\gpu_smoke_grouped\train.jsonl
 D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\results\runs\gpu_smoke_grouped\last.pt
 D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\artifacts\embeddings\gpu_smoke_2.npz
@@ -442,14 +487,14 @@ CLI 入口与职责：
 | 文件 | 字节数 | SHA-256 |
 |---|---:|---|
 | `pyproject.toml` | 808 | `ad200b4473eded7e4c93c9ed9c7849e3131284f1e1d6e7d9e4ac7fb52166aa6c` |
-| `configs\paper.yaml` | 1,343 | `273c3038239d6b95327163b421817b617fc32536e008b434b0be6d5452f05ae1` |
-| `configs\local_fisher_p1.yaml` | 1,546 | `59372a28b1eeb9e52e79cf2b2cea5732a8ee2940796c8dbb44ec3dbdf8dad83f` |
+| `configs\paper.yaml` | 1,369 | `af1a73cc7c648f8c8083d316cd3f0f83cd1c534910594c79caf4fc2413641aa4` |
+| `configs\local_fisher_p1.yaml` | 1,572 | `8a914cacf6f31231e68a5f3c7724c66ed4125c02b642ea65da6deaacd1b3fae9` |
 | `configs\gpu_smoke.yaml` | 513 | `2047b85139bba5f4482bdc57421621bb7981a3e5b3269b9bd80f03fc1152155b` |
 | `configs\semi_local.yaml` | 500 | `cdecb1389ecb1f0ee8d07cf069f10dfca07a3677efaa84508ba25706a8f48ae7` |
 | `src\mmsv\__init__.py` | 89 | `d1f4a61fa0b2491a3fc25e5975d11b7e92a71edb35a682ef46c84bdb770e1d82` |
 | `src\mmsv\config.py` | 803 | `d175a20a350ffe3c3bb3c19b7c01a48973c4fd622bee62cdb8b1f6d83019bf4b` |
 | `src\mmsv\data\fisher.py` | 6,122 | `9e07adc7be42d10ed8a41405f9d71d1d8ccd4b3f5197ccfe239fdf998ab10ccb` |
-| `src\mmsv\data\splits.py` | 4,285 | `6c8cddc031eb21e4491e459fb3b61406b9bf37e523663fbe227d5025c742a315` |
+| `src\mmsv\data\splits.py` | 5,753 | `3055682d5bb9892937a223f9757fe3e1b7b2824201e039a46fc32f0be3d69958` |
 | `src\mmsv\data\trials.py` | 7,310 | `39b93bf9e2bade20bfb16d2fe8bc5017e3ec91d716c11642c1957eb300876976` |
 | `src\mmsv\data\librispeech.py` | 1,909 | `a97ed1181e346251514db84dda746afd6c3c9b82a09096cac850114b32dc0397` |
 | `src\mmsv\audio.py` | 4,482 | `b6976bd512e5c190ac89b5d34b7c98ac7a3e4b8e38fd4ebe208544edd40c4493` |
@@ -458,11 +503,11 @@ CLI 入口与职责：
 | `src\mmsv\metrics.py` | 4,593 | `0c6da0d5ef0f2a2a22e407c6d05e8dfbe715f20240f81fda0db69698468680e0` |
 | `src\mmsv\train.py` | 16,644 | `fe12190116e37bbb7a0e726451869c777667b4ea4018c8ea9a76c49e18014da2` |
 | `src\mmsv\multimodal.py` | 4,247 | `9d169e24eb85c8a2f8d05c5603cda48de5a68857850d4e52849324a1dc09549f` |
-| `src\mmsv\cli.py` | 7,537 | `b6bb47b4ab70cfea0c06bacedc8a29a5a32e0aa10f8651fa2380276be87bf659` |
+| `src\mmsv\cli.py` | 7,627 | `b7ca0908d64c732d97ff0b31a1572083ceb22556451940665d9d814e90e3cb07` |
 | `tests\test_fisher.py` | 923 | `16e0573a4937dca2ab4c5e307130aad1ba1571a63979c2177258c62fe5c66d12` |
 | `tests\test_metrics.py` | 321 | `fd8ee0ef0db2dd4fbd43bbdbed73b77d660e24dfd41ae518a3641149ab01e131` |
 | `tests\test_models.py` | 1,360 | `aae35a4b447286e8e2893c5515c861d47df1e35f034a42d28cbc01efce892540` |
-| `tests\test_protocol.py` | 742 | `86321640621ae72005c3e454638c3cda607a1d4dda94f09b38083ae8a95f6c52` |
+| `tests\test_protocol.py` | 2,536 | `13d5a3de3bbe58a4e3c4490b3fbf598443e463d8a8a213194e3582d608020184` |
 | `tests\test_train.py` | 782 | `136e9599bea2ff87cffc36f582759c341dd4dc5181dd225bfbb6d6e7491a1c8d` |
 
 ## 11. 下一阶段与验收条件
@@ -549,4 +594,4 @@ git submodule update --init --recursive
 - 默认配置：`configs\local_fisher_p1.yaml`。`configs\paper.yaml` 仅用于保存论文规模参考，不作为运行配置。
 - 报告名称：所有后续指标统一标注为“Fisher Part 1 + LibriSpeech train-clean-360 范围复现结果”。
 - 验收标准：优先保证固定 seed、固定 split/trials、完整日志、输出路径和可重复运行；论文表格仅作参考对照，不要求数值完全相同。
-- 范围验证完成时间：2026-08-23 15:12:54 +08:00。配置断言确认只有 1 个 LibriSpeech root 且以 `train-clean-360` 结尾，Fisher 路径指向 LDC2004S13/T19 Part 1；manifest、split、target pool 与 StreamVoiceAnon checkpoint 均存在；自动测试结果为 `5 passed`。
+- 范围验证完成时间：2026-08-23 15:12:54 +08:00。配置断言确认只有 1 个 LibriSpeech root 且以 `train-clean-360` 结尾，Fisher 路径指向 LDC2004S13/T19 Part 1；manifest、split、target pool 与 StreamVoiceAnon checkpoint 均存在；当时自动测试结果为 `5 passed`，最近完整测试已增至 `8 passed`。

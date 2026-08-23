@@ -29,13 +29,17 @@ def split_speakers(
     seed: int,
     require_exact_counts: bool,
     evaluation_min_calls: int = 2,
+    validation_min_calls: int = 2,
+    trial_max_n: int = 15,
 ) -> dict[str, object]:
     calls: dict[str, set[str]] = defaultdict(set)
     utterances: dict[str, int] = defaultdict(int)
+    utterances_by_call: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     for row in iter_manifest(manifest_path):
         speaker_id = row["speaker_id"]
         calls[speaker_id].add(row["call_id"])
         utterances[speaker_id] += 1
+        utterances_by_call[speaker_id][row["call_id"]] += 1
 
     requested = {
         "train": train_count,
@@ -46,29 +50,59 @@ def split_speakers(
         if require_exact_counts:
             raise ValueError(
                 f"严格论文划分需要 {sum(requested.values())} 位说话人，"
-                f"manifest 只有 {len(calls)}。请补齐 Fisher Part 2，或使用兼容配置。"
+                f"manifest 只有 {len(calls)}。当前固定数据范围应使用兼容配置。"
             )
         actual = _scaled_counts(requested, len(calls))
     else:
         actual = requested
 
-    eval_candidates = sorted(
-        speaker for speaker, speaker_calls in calls.items()
-        if len(speaker_calls) >= evaluation_min_calls
-    )
-    if len(eval_candidates) < actual["evaluation"]:
-        raise ValueError(
-            f"evaluation 需要 {actual['evaluation']} 位至少 {evaluation_min_calls} calls 的说话人，"
-            f"实际只有 {len(eval_candidates)}"
-        )
-
     rng = random.Random(seed)
-    rng.shuffle(eval_candidates)
-    evaluation = set(eval_candidates[: actual["evaluation"]])
-    remaining = sorted(set(calls) - evaluation)
+
+    def trial_capable(speaker: str, min_calls: int) -> bool:
+        counts = sorted(utterances_by_call[speaker].values(), reverse=True)
+        if len(counts) < min_calls:
+            return False
+        left = 0
+        right = 0
+        for count in counts:
+            if left <= right:
+                left += count
+            else:
+                right += count
+        return min(left, right) >= trial_max_n
+
+    candidate_sets = {
+        "evaluation": {
+            speaker for speaker in calls if trial_capable(speaker, evaluation_min_calls)
+        },
+        "validation": {
+            speaker for speaker in calls if trial_capable(speaker, validation_min_calls)
+        },
+    }
+    selected: dict[str, set[str]] = {}
+    available = set(calls)
+    # 先分配 calls 要求更高的集合；要求相同时保持 evaluation -> validation 的稳定顺序。
+    requirements = [
+        ("evaluation", actual["evaluation"], evaluation_min_calls),
+        ("validation", actual["validation"], validation_min_calls),
+    ]
+    requirements.sort(key=lambda item: -item[2])
+    for split_name, count, min_calls in requirements:
+        candidates = sorted(candidate_sets[split_name] & available)
+        if len(candidates) < count:
+            raise ValueError(
+                f"{split_name} 需要 {count} 位可构造 call-disjoint max_n={trial_max_n} "
+                f"trial 的说话人（至少 {min_calls} calls），实际可分配 {len(candidates)}"
+            )
+        rng.shuffle(candidates)
+        selected[split_name] = set(candidates[:count])
+        available -= selected[split_name]
+
+    evaluation = selected["evaluation"]
+    validation = selected["validation"]
+    remaining = sorted(available)
     rng.shuffle(remaining)
-    validation = set(remaining[: actual["validation"]])
-    train = set(remaining[actual["validation"] : actual["validation"] + actual["train"]])
+    train = set(remaining[: actual["train"]])
     assigned = train | validation | evaluation
     if assigned != set(calls):
         # 精确配置在数据比论文更多时，把多余 speaker 保留在 train，避免静默丢数据。
@@ -104,11 +138,13 @@ def split_speakers(
         "actual_counts": {name: sum(value == name for value in split_for.values()) for name in requested},
         "require_exact_counts": require_exact_counts,
         "evaluation_min_calls": evaluation_min_calls,
-        "evaluation_candidates": len(eval_candidates),
+        "validation_min_calls": validation_min_calls,
+        "trial_max_n": trial_max_n,
+        "evaluation_candidates": len(candidate_sets["evaluation"]),
+        "validation_candidates": len(candidate_sets["validation"]),
         "disjoint": len(assigned) == len(train) + len(validation) + len(evaluation),
     }
     output_path.with_suffix(".audit.json").write_text(
         json.dumps(audit, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     return audit
-

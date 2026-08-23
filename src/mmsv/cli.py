@@ -48,6 +48,8 @@ def _split(args: argparse.Namespace) -> None:
         int(config["seed"]),
         bool(values["require_exact_counts"]),
         int(values.get("evaluation_min_calls", 2)),
+        int(values.get("validation_min_calls", 2)),
+        int(values.get("max_n", 15)),
     ))
 
 

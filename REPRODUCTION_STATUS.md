@@ -14,10 +14,10 @@
 - 实现 WavLM-ECAPA、ASP 前 frame extraction、mean/query/frame aggregation、AAM-Softmax。
 - 实现可恢复训练、embedding 提取、O-O/O-A/A-A mean-pooling cosine/EER 评分。
 - 已生成本机 Fisher Part 1 manifest：5,850/5,850 calls 对齐、929,364 条 >=1 s utterances。
-- 已生成 P1 兼容 split：5,231/229/1,606；evaluation 生成 3,210 个固定 trials，1 位因 pool 不足被审计剔除。
+- 已生成 trial-capable P1 split：5,231/229/1,606；validation 生成 45,800 个固定 trials，evaluation 生成 3,212 个固定 trials，两个 split 均无 speaker 被剔除。
 - 已筛出 train-clean-360 中 99,278 条 >4 s reference utterances（921 speakers）。
 - WavLM-Large 官方权重已缓存；RTX 5060 上完成 grouped-loader 的 1 个真实优化步（loss=17.3031）并成功回读 2 条 192-d embeddings。
-- StreamVoiceAnon checkpoint `dual_ar_delay_0_8.pth` 已下载并完成文件指纹审计。
+- StreamVoiceAnon 主模型及 4 个配套权重均已下载并完成文件指纹审计；离线模型初始化无 missing/unexpected keys。
 
 ## 确定的数据范围与剩余限制
 
@@ -25,7 +25,7 @@
 |---|---|---|---|
 | Fisher | Part 1 | LDC2004S13/T19 Part 1 已就绪 | 这是最终实验范围，不再等待 Part 2 |
 | LibriSpeech target pool | train-clean-360 | 99,278 条 >4 s utterances 已筛选 | 这是最终实验范围，不再等待 other-500 |
-| StreamVoiceAnon checkpoint | `dual_ar_delay_0_8.pth` | 已下载，598,136,107 字节 | 尚需完成匿名化流水线运行与验证 |
+| StreamVoiceAnon checkpoint | 主模型 + ASR tokenizer + Firefly + CAMPPlus + Spark encoder | 5 个权重均已下载并校验 | CPU 生成受上游 FP16 KV-cache 限制；待 O-O 训练 checkpoint 后在 GPU 上 smoke |
 | 作者代码/split/trials | 当前自行固定并审计 | 官方论文仓库仍未发布精确协议 | 结果按本地范围报告，不能声称精确复现作者 trial |
 | SPHERE decoder | shorten-capable decoder | 已安装 `desphere[fast]`；未检测到 sph2pipe | 可运行；sph2pipe 的按段解码会更快 |
 
