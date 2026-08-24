@@ -14,7 +14,7 @@ import torch
 from torch.utils.data import DataLoader, Dataset, Subset
 from tqdm import tqdm
 
-from .audio import crop_or_pad, read_audio, read_segment
+from .audio import crop_or_pad, crop_or_repeat, read_audio, read_segment
 from .data.fisher import read_manifest
 from .models import AAMSoftmaxLoss, WavLMECAPA
 
@@ -35,6 +35,8 @@ class FisherTrainingDataset(Dataset[tuple[torch.Tensor, int]]):
         seed: int,
         sph2pipe: str | None,
         segment_cache_dir: str | Path | None = None,
+        sampling_mode: str = "one_per_call_side",
+        short_utterance_mode: str = "zero_pad",
     ):
         split_for = _read_split_map(split_path)
         rows = [
@@ -45,18 +47,31 @@ class FisherTrainingDataset(Dataset[tuple[torch.Tensor, int]]):
             raise ValueError(f"{split_name} split 没有 utterance")
         speakers = sorted({row["speaker_id"] for row in rows})
         self.speaker_to_index = {speaker: index for index, speaker in enumerate(speakers)}
-        by_call_side: dict[tuple[str, str], list[dict[str, str]]] = defaultdict(list)
-        for row in rows:
-            by_call_side[(row["audio_path"], row["channel"])].append(row)
-        # 每 epoch 每个 call side 采一条 turn；A/B 相邻可复用 Shorten 解码缓存。
-        by_audio: dict[str, list[tuple[str, list[dict[str, str]]]]] = defaultdict(list)
-        for (audio_path, channel), group in by_call_side.items():
-            by_audio[audio_path].append((channel, group))
-        audio_paths = sorted(by_audio)
-        random.Random(seed).shuffle(audio_paths)
-        self.groups = []
-        for audio_path in audio_paths:
-            self.groups.extend(group for _, group in sorted(by_audio[audio_path], key=lambda item: item[0]))
+        if sampling_mode not in {"one_per_call_side", "all_utterances"}:
+            raise ValueError(f"未知 sampling_mode: {sampling_mode}")
+        if short_utterance_mode not in {"zero_pad", "repeat"}:
+            raise ValueError(f"未知 short_utterance_mode: {short_utterance_mode}")
+        self.sampling_mode = sampling_mode
+        self.short_utterance_mode = short_utterance_mode
+        self.rows: list[dict[str, str]] | None = None
+        self.groups: list[list[dict[str, str]]] | None = None
+        if sampling_mode == "all_utterances":
+            self.rows = rows
+        else:
+            by_call_side: dict[tuple[str, str], list[dict[str, str]]] = defaultdict(list)
+            for row in rows:
+                by_call_side[(row["audio_path"], row["channel"])].append(row)
+            # 每 epoch 每个 call side 采一条 turn；A/B 相邻可复用 Shorten 解码缓存。
+            by_audio: dict[str, list[tuple[str, list[dict[str, str]]]]] = defaultdict(list)
+            for (audio_path, channel), group in by_call_side.items():
+                by_audio[audio_path].append((channel, group))
+            audio_paths = sorted(by_audio)
+            random.Random(seed).shuffle(audio_paths)
+            self.groups = []
+            for audio_path in audio_paths:
+                self.groups.extend(
+                    group for _, group in sorted(by_audio[audio_path], key=lambda item: item[0])
+                )
         self.sample_rate = sample_rate
         self.crop_samples = round(sample_rate * crop_seconds)
         self.seed = seed
@@ -67,12 +82,15 @@ class FisherTrainingDataset(Dataset[tuple[torch.Tensor, int]]):
         )
 
     def __len__(self) -> int:
-        return len(self.groups)
+        return len(self.rows) if self.rows is not None else len(self.groups or [])
 
     def set_epoch(self, epoch: int) -> None:
         self.epoch = int(epoch)
 
     def selected_row(self, index: int, epoch: int | None = None) -> dict[str, str]:
+        if self.rows is not None:
+            return self.rows[index]
+        assert self.groups is not None
         selected_epoch = self.epoch if epoch is None else int(epoch)
         group = self.groups[index]
         rng = random.Random(self.seed + selected_epoch * 1_000_003 + index)
@@ -86,9 +104,13 @@ class FisherTrainingDataset(Dataset[tuple[torch.Tensor, int]]):
         return Path(root) / shard / f"{utt_id}.flac"
 
     def __getitem__(self, index: int) -> tuple[torch.Tensor, int]:
-        group = self.groups[index]
         rng = random.Random(self.seed + self.epoch * 1_000_003 + index)
-        row = group[rng.randrange(len(group))]
+        if self.rows is None:
+            assert self.groups is not None
+            group = self.groups[index]
+            row = group[rng.randrange(len(group))]
+        else:
+            row = self.rows[index]
         if self.segment_cache_dir is None:
             waveform = read_segment(row, self.sample_rate, self.sph2pipe)
         else:
@@ -101,7 +123,10 @@ class FisherTrainingDataset(Dataset[tuple[torch.Tensor, int]]):
                     f"训练片段缓存采样率错误: {cache_path} ({sample_rate} != {self.sample_rate})"
                 )
         start = rng.randrange(max(1, waveform.size - self.crop_samples + 1))
-        waveform = crop_or_pad(waveform, self.crop_samples, start)
+        if self.short_utterance_mode == "repeat":
+            waveform = crop_or_repeat(waveform, self.crop_samples, start)
+        else:
+            waveform = crop_or_pad(waveform, self.crop_samples, start)
         return torch.from_numpy(waveform), self.speaker_to_index[row["speaker_id"]]
 
 
@@ -119,6 +144,7 @@ def _save_checkpoint(
     epoch_complete: bool = True,
     batch_in_epoch: int = 0,
     running_loss: float = 0.0,
+    scaler: torch.amp.GradScaler | None = None,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -133,6 +159,7 @@ def _save_checkpoint(
             "wavlm_omitted_because_frozen": model.frozen,
             "classifier": classifier.state_dict(),
             "optimizer": optimizer.state_dict(),
+            "scaler": None if scaler is None else scaler.state_dict(),
             "scheduler": scheduler.state_dict(),
             "epoch": epoch,
             "epoch_complete": epoch_complete,
@@ -161,6 +188,7 @@ def _optimizer_step(
     gradient_clip: float,
     accumulation: int,
     accumulated_batches: int,
+    scaler: torch.amp.GradScaler | None = None,
 ) -> None:
     """完成一次 optimizer step，并校正 epoch 尾部不足 accumulation 的梯度。"""
     if not 1 <= accumulated_batches <= accumulation:
@@ -170,9 +198,46 @@ def _optimizer_step(
         for parameter in parameters:
             if parameter.grad is not None:
                 parameter.grad.mul_(scale)
+    if scaler is not None:
+        scaler.unscale_(optimizer)
     torch.nn.utils.clip_grad_norm_(parameters, gradient_clip)
-    optimizer.step()
+    if scaler is None:
+        optimizer.step()
+    else:
+        scaler.step(optimizer)
+        scaler.update()
     optimizer.zero_grad(set_to_none=True)
+
+
+def _epoch_indices(length: int, seed: int, epoch: int, shuffle: bool) -> list[int] | range:
+    if not shuffle:
+        return range(length)
+    generator = torch.Generator().manual_seed(seed + epoch * 1_000_003)
+    return torch.randperm(length, generator=generator).tolist()
+
+
+def _forward_embeddings(
+    model: WavLMECAPA,
+    waveforms: torch.Tensor,
+    device: torch.device,
+    feature_microbatch_size: int | None,
+) -> torch.Tensor:
+    """冻结 WavLM 分块前向，再用完整物理 batch 训练 ECAPA/BatchNorm。"""
+    batch_size = int(waveforms.shape[0])
+    if not feature_microbatch_size or feature_microbatch_size >= batch_size:
+        return model(waveforms.to(device, non_blocking=True))
+    if not model.frozen:
+        raise ValueError("feature_microbatch_size 仅支持冻结的 WavLM frontend")
+    features: list[torch.Tensor] = []
+    with torch.no_grad():
+        for chunk in waveforms.split(feature_microbatch_size):
+            chunk_features, frame_mask = model.extract_features(
+                chunk.to(device, non_blocking=True)
+            )
+            if frame_mask is not None:
+                raise ValueError("分块 WavLM 当前要求固定长度、无 attention mask")
+            features.append(chunk_features)
+    return model.backend(torch.cat(features, dim=0))
 
 
 def train_audio(
@@ -207,6 +272,8 @@ def train_audio(
         seed,
         sph2pipe,
         train_settings.get("segment_cache_dir"),
+        str(train_settings.get("sampling_mode", "one_per_call_side")),
+        str(train_settings.get("short_utterance_mode", "zero_pad")),
     )
     batch_size = int(train_settings["batch_size"])
     batches_in_epoch = len(dataset) // batch_size
@@ -244,6 +311,11 @@ def train_audio(
         step_size=int(train_settings["scheduler_step"]),
         gamma=float(train_settings["scheduler_gamma"]),
     )
+    use_amp = bool(train_settings.get("amp", False)) and device.type == "cuda"
+    scaler = torch.amp.GradScaler("cuda", enabled=True) if use_amp else None
+    feature_microbatch_size = int(train_settings.get("feature_microbatch_size", 0)) or None
+    if feature_microbatch_size is not None and feature_microbatch_size < 1:
+        raise ValueError("feature_microbatch_size 必须为正整数")
     start_epoch = 0
     resume_batch = 0
     resumed_running_loss = 0.0
@@ -256,6 +328,8 @@ def train_audio(
         classifier.load_state_dict(state["classifier"])
         optimizer.load_state_dict(state["optimizer"])
         scheduler.load_state_dict(state["scheduler"])
+        if scaler is not None and state.get("scaler") is not None:
+            scaler.load_state_dict(state["scaler"])
         start_epoch, resume_batch, resumed_running_loss = _resume_position(state)
         global_step = int(state["global_step"])
 
@@ -267,6 +341,8 @@ def train_audio(
     num_workers = int(train_settings.get("num_workers", 0))
     prefetch_factor = int(train_settings.get("prefetch_factor", 2))
     pin_memory = bool(train_settings.get("pin_memory", device.type == "cuda"))
+    shuffle_utterances = bool(train_settings.get("shuffle_utterances", False))
+    save_epoch_checkpoints = bool(train_settings.get("save_epoch_checkpoints", False))
     if num_workers < 0 or prefetch_factor < 1:
         raise ValueError("num_workers 必须非负，prefetch_factor 必须为正整数")
     if accumulation < 1 or checkpoint_interval < 1:
@@ -282,7 +358,8 @@ def train_audio(
         if first_batch < 0 or first_batch > batches_in_epoch:
             raise ValueError(f"checkpoint batch_in_epoch 越界: {first_batch}/{batches_in_epoch}")
         first_item = first_batch * batch_size
-        epoch_dataset = Subset(dataset, range(first_item, len(dataset)))
+        epoch_order = _epoch_indices(len(dataset), seed, epoch, shuffle_utterances)
+        epoch_dataset = Subset(dataset, epoch_order[first_item:])
         loader_kwargs: dict[str, Any] = {
             "dataset": epoch_dataset,
             "batch_size": batch_size,
@@ -303,11 +380,20 @@ def train_audio(
         accumulated_batches = 0
         batch_index = first_batch
         for batch_index, (waveforms, labels) in enumerate(progress, start=first_batch + 1):
-            waveforms = waveforms.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
-            embeddings = model(waveforms)
-            loss = classifier(embeddings, labels) / accumulation
-            loss.backward()
+            with torch.autocast(
+                device_type=device.type,
+                dtype=torch.float16,
+                enabled=use_amp,
+            ):
+                embeddings = _forward_embeddings(
+                    model, waveforms, device, feature_microbatch_size
+                )
+                loss = classifier(embeddings, labels) / accumulation
+            if scaler is None:
+                loss.backward()
+            else:
+                scaler.scale(loss).backward()
             accumulated_batches += 1
             running_loss += float(loss.item()) * accumulation
             if accumulated_batches == accumulation:
@@ -317,6 +403,7 @@ def train_audio(
                     float(train_settings["gradient_clip"]),
                     accumulation,
                     accumulated_batches,
+                    scaler,
                 )
                 accumulated_batches = 0
                 global_step += 1
@@ -335,6 +422,7 @@ def train_audio(
                         epoch_complete=False,
                         batch_in_epoch=batch_index,
                         running_loss=running_loss,
+                        scaler=scaler,
                     )
                 if max_steps is not None and global_step >= max_steps:
                     stopped_early = True
@@ -346,6 +434,7 @@ def train_audio(
                 float(train_settings["gradient_clip"]),
                 accumulation,
                 accumulated_batches,
+                scaler,
             )
             global_step += 1
             accumulated_batches = 0
@@ -378,7 +467,24 @@ def train_audio(
             epoch_complete=epoch_complete,
             batch_in_epoch=batch_index,
             running_loss=running_loss,
+            scaler=scaler,
         )
+        if epoch_complete and save_epoch_checkpoints:
+            _save_checkpoint(
+                output_path / f"epoch_{epoch:02d}.pt",
+                model,
+                classifier,
+                optimizer,
+                scheduler,
+                epoch,
+                global_step,
+                dataset.speaker_to_index,
+                {"config": config, "manifest": str(manifest_path), "split": str(split_path)},
+                epoch_complete=True,
+                batch_in_epoch=batch_index,
+                running_loss=running_loss,
+                scaler=scaler,
+            )
         if stopped_early:
             break
     return {

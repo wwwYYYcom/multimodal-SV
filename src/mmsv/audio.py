@@ -109,3 +109,16 @@ def crop_or_pad(waveform: np.ndarray, length: int, start: int | None = None) -> 
     output = np.zeros(length, dtype=np.float32)
     output[: waveform.size] = waveform
     return output
+
+
+def crop_or_repeat(waveform: np.ndarray, length: int, start: int | None = None) -> np.ndarray:
+    """裁剪长语音；短语音循环填充，避免把大段零静音送入 speaker encoder。"""
+    if waveform.size == 0:
+        raise ValueError("不能循环填充空音频")
+    if waveform.size >= length:
+        if start is None:
+            start = 0
+        start = max(0, min(int(start), waveform.size - length))
+        return np.asarray(waveform[start : start + length], dtype=np.float32)
+    repeats = (length + waveform.size - 1) // waveform.size
+    return np.tile(waveform, repeats)[:length].astype(np.float32, copy=False)

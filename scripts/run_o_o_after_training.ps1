@@ -1,7 +1,9 @@
 param(
     [int]$TrainingPid = 0,
     [string]$PythonExe = 'D:\codeAPP\anaconda3\envs\pytorch\python.exe',
-    [string]$RunDir = 'results/runs/audio_lazy_p1_v2'
+    [string]$RunDir = 'results/runs/audio_lazy_p1_v2',
+    [string]$EmbeddingPath = 'artifacts/embeddings/original_evaluation.npz',
+    [string]$ResultDir = 'results/o_o'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -29,24 +31,23 @@ if ($LASTEXITCODE -ne 0) {
     throw 'Checkpoint completeness validation failed'
 }
 
-$embeddingPath = 'artifacts/embeddings/original_evaluation.npz'
 & $PythonExe -m mmsv.cli extract-embeddings `
     --checkpoint $checkpoint `
     --manifest artifacts/metadata/fisher_manifest.csv `
     --trials artifacts/trials/evaluation.jsonl `
-    --output $embeddingPath
+    --output $EmbeddingPath
 if ($LASTEXITCODE -ne 0) {
     throw 'Embedding extraction failed'
 }
 
-New-Item -ItemType Directory -Path 'results/o_o' -Force | Out-Null
+New-Item -ItemType Directory -Path $ResultDir -Force | Out-Null
 foreach ($n in @(5, 10, 15)) {
     & $PythonExe -m mmsv.cli score-mean `
         --trials artifacts/trials/evaluation.jsonl `
-        --original-embeddings $embeddingPath `
+        --original-embeddings $EmbeddingPath `
         --condition O-O `
         --n $n `
-        --output "results/o_o/mean_n$n.csv"
+        --output (Join-Path $ResultDir "mean_n$n.csv")
     if ($LASTEXITCODE -ne 0) {
         throw "O-O mean scoring failed for N=$n"
     }

@@ -1,0 +1,60 @@
+seed: 1234
+sample_rate: 16000
+crop_seconds: 4.0
+
+data:
+  fisher_audio_root: "D:/deeplearning/realtimeVoiceAnon/dataset/prefor_vpc2024/Voice-Privacy-Challenge-2024-main/corpora/fisher/fisher_eng_tr_sp_LDC2004S13/fisher_eng_tr_sp_LDC2004S13"
+  fisher_transcript_root: "D:/deeplearning/realtimeVoiceAnon/dataset/prefor_vpc2024/Voice-Privacy-Challenge-2024-main/corpora/fisher/fe_03_p1_tran_LDC2004T19/fe_03_p1_tran/data/trans"
+  fisher_calldata: "D:/deeplearning/realtimeVoiceAnon/dataset/prefor_vpc2024/Voice-Privacy-Challenge-2024-main/corpora/fisher/fe_03_p1_tran_LDC2004T19/fe_03_p1_tran/doc/fe_03_p1_calldata.tbl"
+  librispeech_roots:
+    - "D:/deeplearning/realtimeVoiceAnon/dataset/prefor_vpc2024/Voice-Privacy-Challenge-2024-main/corpora/LibriSpeech/train-clean-360"
+  min_segment_seconds: 1.0
+
+split:
+  train_speakers: 5712
+  validation_speakers: 250
+  evaluation_speakers: 1753
+  require_exact_counts: false
+  evaluation_min_calls: 2
+  validation_min_calls: 2
+  max_n: 15
+
+trials:
+  n_values: [5, 10, 15]
+  validation_target_per_speaker: 100
+  validation_nontarget_per_speaker: 100
+  evaluation_target_per_speaker: 1
+  evaluation_nontarget_per_speaker: 1
+
+model:
+  wavlm_name: microsoft/wavlm-large
+  hf_endpoint: https://huggingface.co
+  wavlm_frozen: true
+  embedding_dim: 192
+  query_heads: 4
+  query_temperature: 0.3
+
+train:
+  # 论文口径：ECAPA、ASP BatchNorm 和 AAM 均看到真实的 64 utterance batch。
+  batch_size: 64
+  gradient_accumulation: 1
+  sampling_mode: all_utterances
+  shuffle_utterances: true
+  short_utterance_mode: repeat
+  segment_cache_dir: artifacts/cache/fisher_train_all_p1
+  # 冻结 WavLM 分块前向以适应 8 GiB GPU，随后拼接特征训练完整 ECAPA batch。
+  feature_microbatch_size: 32
+  amp: true
+  num_workers: 1
+  prefetch_factor: 2
+  pin_memory: true
+  checkpoint_interval_steps: 100
+  save_epoch_checkpoints: true
+  epochs: 30
+  learning_rate: 5.0e-4
+  weight_decay: 1.0e-4
+  gradient_clip: 1.0
+  aam_margin: 0.2
+  aam_scale: 30.0
+  scheduler_step: 5
+  scheduler_gamma: 0.5
