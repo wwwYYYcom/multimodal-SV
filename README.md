@@ -51,6 +51,16 @@ Windows 上正式训练前，先把 30 个 epoch 确定会抽到的 Fisher utter
 
 脚本支持重复执行并跳过非空缓存文件；只有生成 `audit.json` 后才视为缓存完整。`configs/local_fisher_p1.yaml` 中的 `segment_cache_dir` 会强制训练使用完整缓存，缺少任一片段时立即报错。
 
+论文口径修正版不再采用“每 call-side 一条”的低覆盖采样。它缓存 Part 1 train split 的全部 572,951 条 utterance，并以物理 batch 64 训练 ECAPA；冻结的 WavLM 按 32 条分块前向以适配 8 GiB GPU：
+
+```powershell
+& 'D:\codeAPP\anaconda3\envs\pytorch\python.exe' -u scripts/build_fisher_full_training_cache.py --config configs/local_fisher_p1_corrected.yaml --manifest artifacts/metadata/fisher_manifest.csv --splits artifacts/metadata/speaker_splits.csv --output-dir artifacts/cache/fisher_train_all_p1 --reuse-cache-dir artifacts/cache/fisher_train_selected_30e
+
+mmsv train-audio --config configs/local_fisher_p1_corrected.yaml --manifest artifacts/metadata/fisher_manifest.csv --splits artifacts/metadata/speaker_splits.csv --output-dir results/runs/audio_corrected_p1
+```
+
+`scripts/build_full_cache_then_train_corrected.ps1` 会串联全量缓存、缓存审计、corrected 训练和独立的 O-O 后处理。旧版 `audio_lazy_p1_v2` 及 `results/o_o` 作为失效基线保留，不得用于初始化 corrected run。
+
 短训练验证（下载 WavLM-Large 后，只执行 1 个 optimizer step）：
 
 ```powershell

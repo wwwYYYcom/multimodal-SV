@@ -6,7 +6,7 @@
 
 - 项目根目录：`D:\deeplearning\ICASSP2027\multimodal_sv_reproduction`
 - 时区：Asia/Shanghai（UTC+08:00）
-- 本次汇总完成时间：2026-08-24 15:14:17 +08:00
+- 本次汇总完成时间：2026-08-24 15:26:52 +08:00
 - 论文：Garg et al., *Multimodal Speaker Verification as a Threat to Speaker Anonymization* (2026)
 - 论文 PDF：`C:\Users\wwwYYYcom\Zotero\storage\DH7AVWNV\Garg 等 - 2026 - Multimodal Speaker Verification as a Threat to Speaker Anonymization.pdf`
 - 辅助复现说明：`D:\download4browser\Multimodal_Speaker_Verification_复现说明文档.docx`
@@ -728,3 +728,51 @@ git submodule update --init --recursive
 - 作者官方仓库 commit `9384c1b610a1261bdf5d7346c63d227095ab411f` 当前仍只有“Code and pretrained models will be released soon”，精确 WavLM 层融合与 ECAPA 细节仍不可核对。
 
 修正决策：保留 E20 全部产物；新建 corrected 配置和运行目录，使用全量随机 utterance、ECAPA/AAM 物理 batch 64、冻结 WavLM 小块前向、短语音循环补齐、每 epoch 独立 checkpoint。不得从 E20 的塌缩 checkpoint 初始化 corrected 模型。
+
+## 17. Corrected 全量训练实现与启动记录
+
+### E21：物理 batch 64 GPU smoke
+
+- 状态：完成。
+- 完成时间：2026-08-24 15:23:00 +08:00。
+- 目的：确认冻结 WavLM 可分块前向，同时 ECAPA、ASP BatchNorm 和 AAM 一次接收真实 64 utterance batch；确认 AMP、反向传播、optimizer、scaler 和 checkpoint 均可用。
+- 数据：epoch 0 固定 shuffle 顺序的首个 64-utterance batch；42 条临时解码、22 条从旧缓存硬链接复用。临时缓存审计路径：`results\runs\corrected_physical_batch_smoke\cache\audit.json`。
+- 正式采用参数：physical batch 64、gradient accumulation 1、WavLM feature micro-batch 32、AMP FP16、短语音循环填充、全量 utterance 模式。
+- 结果：global step 1、loss `16.812938690185547`、核心 step 时间 `1.7371` 秒；`backend.asp_bn.num_batches_tracked=1`，AMP scale `65536`。
+- GPU 监控：峰值利用率 99%、峰值显存 5,930 MiB、峰值功耗 95.56 W；RTX 5060 8 GiB 无 OOM，并保留约 2.2 GiB 余量。
+- 输出目录：`results\runs\corrected_physical_batch_smoke_v4`。
+- checkpoint：115,737,155 字节，SHA-256 `7c1962178ebd3b9fd0f1842590a3fdd014507a0d690dbdb80749fb0b48cc5ed7`。
+- train log：321 字节，SHA-256 `e9517747d3a14d2184430073384f94480fa254747330b3ab566b751760ae61d3`。
+- 运行命令：
+
+```powershell
+& 'D:\codeAPP\anaconda3\envs\pytorch\python.exe' -u -m mmsv.cli train-audio --config configs/gpu_smoke_corrected.yaml --manifest artifacts/metadata/fisher_manifest.csv --splits artifacts/metadata/speaker_splits.csv --output-dir results/runs/corrected_physical_batch_smoke_v4 --max-steps 1
+```
+
+### E22：Corrected 全量缓存与正式训练监督流程
+
+- 状态：进行中；当前阶段为全量 Fisher Part 1 train utterance 缓存，审计通过后自动开始随机初始化训练。
+- 启动时间：2026-08-24 15:26:18 +08:00。
+- supervisor PID：`79252`；cache builder PID：`59628`。
+- 训练代码 commit：`e0ce0bff6df8a597faa993386e65518e9f0d1d70`（`fix: train ECAPA with full physical batches`）。
+- 数据范围：仅 Fisher Part 1 train split 的 572,951 utterances；LibriSpeech 仍只保留 `train-clean-360`，且不参与 O-O 训练。
+- 全量缓存目录：`artifacts\cache\fisher_train_all_p1`。将硬链接复用旧缓存中已有的 180,311 条，缺失条目从 Part 1 SPHERE 解码；不删除旧缓存。
+- 正式训练目录：`results\runs\audio_corrected_p1`；从随机初始化开始，不加载 E20 checkpoint。
+- 训练规模：8,952 full batches/epoch、30 epochs；理论 total optimizer steps 为 268,560，末 batch 余数因 `drop_last=true` 每 epoch 丢弃 23 条。
+- 每 100 steps 原子保存 `last.pt`，并保留 `epoch_00.pt` 至 `epoch_29.pt`，供后续 validation 选择最佳 checkpoint。
+- corrected embedding 输出：`artifacts\embeddings\original_evaluation_corrected.npz`；corrected Mean O-O 输出：`results\o_o_corrected`，不会覆盖 E20 失效基线。
+- supervisor 日志：`results\runs\audio_corrected_p1\supervisor.stdout.log`、`supervisor.stderr.log`；训练与后处理日志使用同目录下 `process.*.log` 与 `post_pipeline.*.log`。
+- 完整启动脚本：`scripts\build_full_cache_then_train_corrected.ps1`。
+- 自动测试：`15 passed`。
+
+关键运行代码指纹：
+
+| 文件 | 字节数 | SHA-256 |
+|---|---:|---|
+| `configs\local_fisher_p1_corrected.yaml` | 2,037 | `0babedd4ba4124310c2f58e6034615e258710ee7f27fc13106dc3f49882c173f` |
+| `configs\gpu_smoke_corrected.yaml` | 706 | `e5763c2c6348b472cca82afc0482f74487b27fb2dc70ed74b5f2b4f027165ffc` |
+| `src\mmsv\train.py` | 23,371 | `525b3c531da371bbe061ce88f85e5c3e26ff3357be07d858c7c3a14275d9df8b` |
+| `src\mmsv\audio.py` | 5,124 | `1ef9f9e17eee6bf4d53c75885cf6f1851585bc79379daab32f46417a8146b2c8` |
+| `scripts\build_fisher_full_training_cache.py` | 4,361 | `9fb77b4389060c2634b849db3ae471f08f9f639087c935ffa03efbd75976b49d` |
+| `scripts\build_full_cache_then_train_corrected.ps1` | 2,937 | `d3c91f5c5db66b37ed88d5bbd5dda7b1f4cc8e377b90d1cdf824b7d63d0c75e1` |
+| `scripts\run_o_o_after_training.ps1` | 1,970 | `04907e281463eebc01af7b9f1eace4d2ee5d3792a8b96df5de63cc8e7b67d4e1` |
