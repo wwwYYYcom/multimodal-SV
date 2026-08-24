@@ -776,3 +776,33 @@ git submodule update --init --recursive
 | `scripts\build_fisher_full_training_cache.py` | 4,361 | `9fb77b4389060c2634b849db3ae471f08f9f639087c935ffa03efbd75976b49d` |
 | `scripts\build_full_cache_then_train_corrected.ps1` | 2,937 | `d3c91f5c5db66b37ed88d5bbd5dda7b1f4cc8e377b90d1cdf824b7d63d0c75e1` |
 | `scripts\run_o_o_after_training.ps1` | 1,970 | `04907e281463eebc01af7b9f1eace4d2ee5d3792a8b96df5de63cc8e7b67d4e1` |
+
+## 18. Fisher 训练缓存目录整合
+
+- 状态：已安排安全自动整合；等待 E22 全量缓存构建完成。
+- 安排时间：2026-08-24 17:39:05 +08:00。
+- 目的：最终只保留 `artifacts\cache\fisher_train_all_p1`，消除旧目录 `artifacts\cache\fisher_train_selected_30e`，同时保留旧缓存审计信息。
+- 重合核验：抽查时全量目录与旧目录已有 106,881 个同名 FLAC；106,881 个全部具有相同的设备号和文件索引号，即为同一物理文件的 NTFS 硬链接，不是复制件。对应逻辑大小为 4,587,644,389 字节，因此当前没有重复占用这部分物理磁盘空间。
+- 旧缓存总量：180,311 个 FLAC。不能在全量构建过程中提前删除，因为构建器仍以旧目录作为硬链接复用源。
+- 安全条件：全量目录必须存在 `audit.json`，且其中 `train_utterances=572951`、`target_utterances=572951`；随后必须逐条确认旧目录全部 180,311 个 FLAC 在全量目录中存在并指向同一物理文件。任一条件不满足即报错并保留旧目录。
+- 完成动作：把旧目录的 `audit.json` 保存为 `artifacts\cache\fisher_train_all_p1\selected_30e.audit.json`，然后删除旧目录名。音频仍完整保存在全量目录，删除的只是多余硬链接名称。
+- 缓存进度快照：2026-08-24 17:39:30 +08:00，全量目录已有 354,905 / 572,951 个 FLAC；cache builder PID `59628`、训练 supervisor PID `79252` 均正常。
+- 整合 watcher PID：`84704`；启动时已输出 `waiting_for_builder=true`。
+- 标准输出：`D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\results\runs\audio_corrected_p1\cache_consolidation.stdout.log`。
+- 标准错误：`D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\results\runs\audio_corrected_p1\cache_consolidation.stderr.log`。
+- 运行代码 commit：`57c0566`（`feat: consolidate Fisher caches safely`）。
+- 自动测试：固定 `pytorch` 环境下 `17 passed`；PowerShell AST 解析、Python 编译与 `git diff --check` 均通过。
+
+运行命令：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\consolidate_cache_after_build.ps1 -BuilderPid 59628
+```
+
+本次新增代码指纹：
+
+| 文件 | 字节数 | SHA-256 |
+|---|---:|---|
+| `scripts\verify_cache_hardlinks.py` | 2,193 | `a7cf4eb43f45129714fe662129f257b4a57ca9b889cad0f072bde7b3f5c32383` |
+| `scripts\consolidate_cache_after_build.ps1` | 3,233 | `338ea9c8ebe82e1186fda75934ffab74932fa8fa75f1a34c09dbb12010b9ce22` |
+| `tests\test_cache_verification.py` | 1,119 | `db21638a0b18ce456045111b9e47b9172d089839823f28ff6885c5789ea36544` |

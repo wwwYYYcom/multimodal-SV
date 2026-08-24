@@ -61,6 +61,8 @@ mmsv train-audio --config configs/local_fisher_p1_corrected.yaml --manifest arti
 
 `scripts/build_full_cache_then_train_corrected.ps1` 会串联全量缓存、缓存审计、corrected 训练和独立的 O-O 后处理。旧版 `audio_lazy_p1_v2` 及 `results/o_o` 作为失效基线保留，不得用于初始化 corrected run。
 
+全量缓存构建期间，`fisher_train_selected_30e` 作为硬链接复用源暂时保留。`scripts/consolidate_cache_after_build.ps1` 会在完整审计通过后逐条验证 180,311 个硬链接，把旧审计复制到全量目录并移除旧目录；最终训练缓存统一位于 `artifacts/cache/fisher_train_all_p1`。
+
 短训练验证（下载 WavLM-Large 后，只执行 1 个 optimizer step）：
 
 ```powershell
