@@ -22,25 +22,9 @@ if (-not (Test-Path -LiteralPath $checkpoint)) {
     throw "Training ended without checkpoint: $checkpoint"
 }
 
-& $PythonExe -c @'
-import json
-import sys
-import torch
-
-path = sys.argv[1]
-state = torch.load(path, map_location="cpu", weights_only=False)
-metadata = {
-    "epoch": int(state["epoch"]),
-    "epoch_complete": bool(state.get("epoch_complete", True)),
-    "batch_in_epoch": int(state.get("batch_in_epoch", 0)),
-    "global_step": int(state["global_step"]),
-}
-print(json.dumps(metadata))
-if metadata["epoch"] != 29 or not metadata["epoch_complete"]:
-    raise SystemExit(
-        f"Refusing evaluation: training is incomplete ({metadata})"
-    )
-'@ $checkpoint
+& $PythonExe scripts/validate_training_checkpoint.py `
+    --checkpoint $checkpoint `
+    --expected-last-epoch 29
 if ($LASTEXITCODE -ne 0) {
     throw 'Checkpoint completeness validation failed'
 }
