@@ -6,7 +6,7 @@
 
 - 项目根目录：`D:\deeplearning\ICASSP2027\multimodal_sv_reproduction`
 - 时区：Asia/Shanghai（UTC+08:00）
-- 本次汇总完成时间：2026-08-23 22:42:00 +08:00
+- 本次汇总完成时间：2026-08-24 15:14:17 +08:00
 - 论文：Garg et al., *Multimodal Speaker Verification as a Threat to Speaker Anonymization* (2026)
 - 论文 PDF：`C:\Users\wwwYYYcom\Zotero\storage\DH7AVWNV\Garg 等 - 2026 - Multimodal Speaker Verification as a Threat to Speaker Anonymization.pdf`
 - 辅助复现说明：`D:\download4browser\Multimodal_Speaker_Verification_复现说明文档.docx`
@@ -667,7 +667,7 @@ git submodule update --init --recursive
 
 ### E19：Fisher 确定性训练片段缓存
 
-- 状态：进行中；缓存完成后自动恢复正式训练。
+- 状态：完成；缓存完成后已自动恢复并完成旧版正式训练。
 - step 400 切换时间：2026-08-23 22:40:06 +08:00。
 - 正式断点：`epoch=3`、`epoch_complete=false`、`batch_in_epoch=1856/3636`、`global_step=400`、`running_loss=27661.14385318756`。
 - 缓存开始时间：2026-08-23 22:40:26 +08:00。
@@ -686,3 +686,45 @@ git submodule update --init --recursive
 - 自动测试：`11 passed`。
 - 代码提交：`39ed207b80371e4b28de8b11a9ee9f19d537e1cb`（`perf: cache selected Fisher training segments`）。
 - 关键代码指纹：`src\mmsv\train.py` 18,598 字节，SHA-256 `fd4dd476dfc14511eb400326bc7d4ca1fd95839789523b1fc21dfdef8b02b2db`；`scripts\build_fisher_training_cache.py` 3,580 字节，SHA-256 `6f056136cc040bb7f75ebe38dd2f3fe3d5039baae34714504218f46b5e785384`；`scripts\build_cache_then_resume.ps1` 2,631 字节，SHA-256 `c50a29e51818af2a34ac8ee470fa04f46f8dacfb008fe512c39b4aee942c8b27`；配置 SHA-256 `0c09778b24037b18e0d6f84d8f1abcd797b1e8e653350251e8851b6d17f965d3`。
+
+最终缓存审计：2026-08-24 01:19:30 +08:00 完成，耗时 9,541.38 秒；180,311 个 FLAC、8,069,502,411 字节（7.515 GiB）。`audit.json` 798 字节，SHA-256 `b8fbfee1865c212aa32017b6d3f76c21ce9f90b52dc6400abf6cd97c65ee4918`。
+
+## 16. E20：旧版 O-O Mean 结果与失效诊断
+
+- 状态：完成，但判定为失效训练基线；保留全部产物，不作为论文数值复现结论。
+- 训练完成时间：2026-08-24 04:18:41 +08:00。
+- 后处理完成时间：2026-08-24 12:30:53 +08:00。
+- 最终 checkpoint：epoch 29 完整、batch 3636/3636、global step 3420、loss `13.491323512510629`、learning rate `7.8125e-06`。
+- checkpoint：`results\runs\audio_lazy_p1_v2\last.pt`，115,738,115 字节，SHA-256 `f8056f101eeed10aca73e57d087994be6834be0a3103d1195bfce57d62da9c61`。
+- 训练日志：`results\runs\audio_lazy_p1_v2\train.jsonl`，9,324 字节，SHA-256 `3ba6730037705765535fff74d7db286d7d6353d0f073356901af2379a3f74a9d`。
+- evaluation embeddings：86,222 条、192 维；`artifacts\embeddings\original_evaluation.npz`，62,468,340 字节，SHA-256 `71cc51e1dc6ef956a3455243d8f97c1df31271077242641176eccbad657d96d7`。
+
+| N | target trials | non-target trials | EER | threshold | 论文 Mean O-O |
+|---:|---:|---:|---:|---:|---:|
+| 5 | 1,606 | 1,606 | 38.480697% | 0.727445 | 3.87% |
+| 10 | 1,606 | 1,606 | 34.869240% | 0.780447 | 3.29% |
+| 15 | 1,606 | 1,606 | 30.946451% | 0.813190 | 3.09% |
+
+结果文件：
+
+| 文件 | 字节数 | SHA-256 |
+|---|---:|---|
+| `results\o_o\mean_n5.csv` | 150,790 | `73cc8ff555f14f72122cce04fc0018e6ceba0510553f15fba47638371e45c68e` |
+| `results\o_o\mean_n5.metrics.json` | 289 | `c888f164b87d387321b0f8757b25cc5395dc95d52175452c1a4dfa9056716557` |
+| `results\o_o\mean_n10.csv` | 150,457 | `e42855164ba6fbce0869b2b122b0af320d0fde1dd9da06667b2995e590c16405` |
+| `results\o_o\mean_n10.metrics.json` | 289 | `924d36755d41ca1e415def4a224bd0e8cb942c25ed9f04a60f54eaf1c6d0c340` |
+| `results\o_o\mean_n15.csv` | 150,284 | `a934d2bffe48f6dfa6b451a4a246cbf4bb4a9af2c218eef67bf62195ef17efd6` |
+| `results\o_o\mean_n15.metrics.json` | 291 | `df575d2b2aaf0b4f052862fd94c8b749f85e8f535d116ffd862d331568e82cdd` |
+
+失效诊断（2026-08-24 14:55 至 15:14 +08:00）：
+
+- EER 标签、trial speaker/call 一致性和 target/non-target 方向均正确；N 增加时 EER 单调下降，排除标签反转。
+- 192 维 evaluation embedding 的第一主成分占 73.36% 方差，前 10 主成分占 99.59%，参与率有效秩仅 1.81，存在严重表示塌缩。
+- epoch 29 的 256 条训练样本闭集诊断：5,231 类 cosine top-1 仅 0.390625%，AAM loss 14.2644，模型未充分学成。
+- 本地 train split 有 572,951 utterances，但 call-side 采样每 epoch 只呈现 7,272 条；30 epochs 仅 3,420 optimizer steps。按物理 batch 64 遍历全部本地 turns 的同口径估算为 268,560 steps，旧版仅为 1.27%。
+- 梯度累积 `2×32` 不等于论文物理 batch 64：ECAPA 的 BatchNorm（尤其 ASP 后 3,072 维 BN）每次仍只观察 2 条样本；固定 A/B call-side 配对且不 shuffle 会进一步污染批统计。
+- 66.66% 的缓存训练 utterance 小于 4 秒，旧版使用零填充且未向 WavLM/ASP 传 attention mask。
+- `train-clean-360` 只参与匿名化 target pool，不参与 O-O，因此不是本次 O-O 巨大差距的原因。
+- 作者官方仓库 commit `9384c1b610a1261bdf5d7346c63d227095ab411f` 当前仍只有“Code and pretrained models will be released soon”，精确 WavLM 层融合与 ECAPA 细节仍不可核对。
+
+修正决策：保留 E20 全部产物；新建 corrected 配置和运行目录，使用全量随机 utterance、ECAPA/AAM 物理 batch 64、冻结 WavLM 小块前向、短语音循环补齐、每 epoch 独立 checkpoint。不得从 E20 的塌缩 checkpoint 初始化 corrected 模型。
