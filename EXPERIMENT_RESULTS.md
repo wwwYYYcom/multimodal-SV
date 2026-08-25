@@ -826,3 +826,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\consolidate_cach
 - epoch 汇总：`D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\results\runs\audio_corrected_p1\train.jsonl`。
 - checkpoint：`D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\results\runs\audio_corrected_p1\last.pt` 及同目录 `epoch_00.pt` 至最终 `epoch_29.pt`。
 - 后处理日志：`D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\results\runs\audio_corrected_p1\post_pipeline.stdout.log`、`post_pipeline.stderr.log`；当前内容为 `waiting_for_training=true`。
+
+### 2026-08-25 20:29 训练进度更新
+
+- 状态：PID `71796` 正常运行；PID `83540` 正常等待训练完成，后处理尚未启动。
+- 已完整完成 epoch 0 至 11；`epoch_11.pt` 于 2026-08-25 19:47:42 +08:00 写入。epoch 11 loss 为 `0.6868679094410454`，耗时 `7537.209326267242` 秒，global step `107424`。
+- 当前为 epoch 索引 12，即第 13/30 个 epoch。实时日志约为 2,961/8,952 batch、global step 110,385；总训练进度约 41.10%，实时累计平均 loss 约 `0.5734`。
+- 最近原子 checkpoint 于 2026-08-25 20:29:47 +08:00 写入：epoch 12、batch 2,976、global step 110,400、`epoch_complete=false`、`running_loss=1706.709677129984`，文件大小 115,738,499 字节。
+- GPU 快照：利用率 99%，显存 6,316/8,151 MiB，功耗 83.52 W。
+- D 盘剩余 24.93 GiB。
+- 按最近完整 epoch 的实际速度估计尚需约 36.5 小时，训练预计仍在 2026-08-27 09:00 +08:00 前后完成；完成后 watcher 自动开始 corrected embedding 和 Mean O-O N=5/10/15 评估。
