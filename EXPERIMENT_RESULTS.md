@@ -779,8 +779,9 @@ git submodule update --init --recursive
 
 ## 18. Fisher 训练缓存目录整合
 
-- 状态：已安排安全自动整合；等待 E22 全量缓存构建完成。
+- 状态：完成。
 - 安排时间：2026-08-24 17:39:05 +08:00。
+- 完成时间：2026-08-24 19:04:31 +08:00。
 - 目的：最终只保留 `artifacts\cache\fisher_train_all_p1`，消除旧目录 `artifacts\cache\fisher_train_selected_30e`，同时保留旧缓存审计信息。
 - 重合核验：抽查时全量目录与旧目录已有 106,881 个同名 FLAC；106,881 个全部具有相同的设备号和文件索引号，即为同一物理文件的 NTFS 硬链接，不是复制件。对应逻辑大小为 4,587,644,389 字节，因此当前没有重复占用这部分物理磁盘空间。
 - 旧缓存总量：180,311 个 FLAC。不能在全量构建过程中提前删除，因为构建器仍以旧目录作为硬链接复用源。
@@ -806,3 +807,22 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\consolidate_cach
 | `scripts\verify_cache_hardlinks.py` | 2,193 | `a7cf4eb43f45129714fe662129f257b4a57ca9b889cad0f072bde7b3f5c32383` |
 | `scripts\consolidate_cache_after_build.ps1` | 3,233 | `338ea9c8ebe82e1186fda75934ffab74932fa8fa75f1a34c09dbb12010b9ce22` |
 | `tests\test_cache_verification.py` | 1,119 | `db21638a0b18ce456045111b9e47b9172d089839823f28ff6885c5789ea36544` |
+
+最终结果：全量缓存于 2026-08-24 19:03:02 +08:00 完成，共 572,951 个 FLAC、25,246,096,582 逻辑字节；其中新解码 392,640 条、从旧缓存硬链接 180,311 条。整合验证结果为 `valid=true`、`verified_hardlinks=180311`、缺失 0、不同物理文件 0。旧目录已删除，只保留 `artifacts\cache\fisher_train_all_p1`。全量 `audit.json` 为 961 字节，SHA-256 `58bb63fdb4fe9cb22eb5a694785805e03de7eeb685ea0be190ba1e06b7cd4a24`；保留的 `selected_30e.audit.json` 为 798 字节，SHA-256 `b8fbfee1865c212aa32017b6d3f76c21ce9f90b52dc6400abf6cd97c65ee4918`。
+
+## 19. E22 corrected 正式训练进度快照
+
+- 状态：训练正常进行中；尚未开始 corrected O-O 后处理。
+- 检查时间：2026-08-25 17:52:38 +08:00。
+- 训练进程：PID `71796`，启动于 2026-08-24 19:03:05 +08:00；O-O watcher PID `83540` 正常等待训练结束。
+- 当前阶段：epoch 索引 11，即第 12/30 个 epoch；实时日志为 701/8,952 batch、global step 99,173/268,560，总 optimizer-step 进度约 36.93%。
+- 最近原子 checkpoint：`last.pt` 记录 epoch 11、batch 628、global step 99,100、`epoch_complete=false`；实时进度比 checkpoint 超前 73 steps，若异常中断最多重跑该区间。
+- 已完整完成 epoch 0 至 10；对应 checkpoint `epoch_00.pt` 至 `epoch_10.pt` 均存在，每个约 115.74 MB。
+- 完整 epoch loss：7.289619、3.668416、2.918002、2.489858、2.180034、1.630999、1.429098、1.287293、1.162275、1.051252、0.775268。当前第 12 个 epoch 的实时累计平均 loss 约 0.6098，下降趋势正常。
+- 当前吞吐：约 1.03 batch/s；完整 epoch 实测约 2.03 至 2.14 小时。按当前速度估算剩余约 39 小时，预计 2026-08-27 09:00 +08:00 前后完成训练，之后自动进行 embedding 提取和 Mean O-O N=5/10/15 评估；该时间是动态估计，不是完成记录。
+- GPU 快照：利用率 97%，显存 6,185/8,151 MiB，功耗 81.03 W；GPU 已处于高负载状态。
+- 磁盘快照：D 盘剩余 25.07 GiB；当前 checkpoint 增长规模可控。
+- 训练日志：`D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\results\runs\audio_corrected_p1\process.stderr.log`。
+- epoch 汇总：`D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\results\runs\audio_corrected_p1\train.jsonl`。
+- checkpoint：`D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\results\runs\audio_corrected_p1\last.pt` 及同目录 `epoch_00.pt` 至最终 `epoch_29.pt`。
+- 后处理日志：`D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\results\runs\audio_corrected_p1\post_pipeline.stdout.log`、`post_pipeline.stderr.log`；当前内容为 `waiting_for_training=true`。
