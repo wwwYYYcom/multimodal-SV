@@ -247,7 +247,7 @@ def build_parser() -> argparse.ArgumentParser:
     command.add_argument("--original-embeddings", required=True)
     command.add_argument("--anonymized-embeddings")
     command.add_argument("--condition", choices=["O-O", "O-A", "A-A"], required=True)
-    command.add_argument("--n", type=int, choices=[5, 10, 15], required=True)
+    command.add_argument("--n", type=int, choices=[1, 5, 10, 15], required=True)
     command.add_argument("--output", required=True)
     command.set_defaults(func=_score)
     return parser

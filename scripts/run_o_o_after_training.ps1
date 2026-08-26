@@ -41,7 +41,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 New-Item -ItemType Directory -Path $ResultDir -Force | Out-Null
-foreach ($n in @(5, 10, 15)) {
+foreach ($n in @(1, 5, 10, 15)) {
     & $PythonExe -m mmsv.cli score-mean `
         --trials artifacts/trials/evaluation.jsonl `
         --original-embeddings $EmbeddingPath `

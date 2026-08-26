@@ -20,7 +20,7 @@ split:
   max_n: 15
 
 trials:
-  n_values: [5, 10, 15]
+  n_values: [1, 5, 10, 15]
   validation_target_per_speaker: 100
   validation_nontarget_per_speaker: 100
   evaluation_target_per_speaker: 1

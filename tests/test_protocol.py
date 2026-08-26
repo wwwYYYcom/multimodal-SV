@@ -8,7 +8,8 @@ from mmsv.data.trials import nested_sample, validate_trials
 
 
 def test_nested_sample_is_prefix_nested() -> None:
-    result = nested_sample([str(i) for i in range(30)], [5, 10, 15], random.Random(3))
+    result = nested_sample([str(i) for i in range(30)], [1, 5, 10, 15], random.Random(3))
+    assert result[1] == result[5][:1]
     assert result[5] == result[10][:5]
     assert result[10] == result[15][:10]
 
@@ -22,7 +23,7 @@ def test_validate_trials(tmp_path: Path) -> None:
         "target_utt_ids": [f"t{i}" for i in range(15)],
     }
     path.write_text(json.dumps(trial) + "\n", encoding="utf-8")
-    assert validate_trials(path, [5, 10, 15]) == {"target": 1, "nontarget": 0}
+    assert validate_trials(path, [1, 5, 10, 15]) == {"target": 1, "nontarget": 0}
 
 
 def test_split_reserves_trial_capable_validation_and_evaluation_speakers(tmp_path: Path) -> None:

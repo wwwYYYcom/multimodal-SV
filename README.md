@@ -95,7 +95,7 @@ mmsv anonymize-streamvoice --plan artifacts/anonymization/evaluation_plan.csv --
 
 runner 会跳过已经存在的非空 FLAC、追加 progress JSONL，并将 StreamVoiceAnon 的 44.1 kHz 输出立即转为 16 kHz FLAC。批量匿名化与 O-O 训练不要同时占用 GPU。
 
-当前正式训练由 `scripts/run_o_o_after_training.ps1` 监控。它只接受完整的 epoch 29 checkpoint，随后自动执行 trial-filtered embedding 提取以及 Mean N=5/10/15 O-O 评分；训练提前退出时会拒绝评分。
+当前正式训练由 `scripts/run_o_o_after_training.ps1` 监控。它只接受完整的 epoch 29 checkpoint，随后自动执行 trial-filtered embedding 提取以及 Mean N=1/5/10/15 O-O 评分；训练提前退出时会拒绝评分。N=1 是本地新增的单语句对照，论文表格仍只报告 N=5/10/15。
 
 训练每 10 个 optimizer step 以及每个 epoch 结束时原子写入 `last.pt`，checkpoint 记录 epoch 内 batch 位置；中断后不会重跑整个 epoch。每个 epoch 尾部不足 gradient accumulation 的 batch 会在校正梯度缩放后正常更新。嵌入与 EER：
 
@@ -114,7 +114,7 @@ mmsv score-mean --trials artifacts/trials/evaluation.jsonl --original-embeddings
 
 - speaker-disjoint train/validation/evaluation；validation 和 evaluation speaker 均须能构造 call-disjoint `N=15` 双侧 trial。
 - enrollment/target 按 call 分池，没有 call 泄漏。
-- `N={5,10,15}` 使用一次 max-N 采样再切前缀，严格满足 `U5 subset U10 subset U15`。
+- `N={1,5,10,15}` 使用一次 max-N 采样再切前缀，严格满足 `U1 subset U5 subset U10 subset U15`；N=1 是本地扩展，不冒充论文报告项。
 - O-O / O-A / A-A 可复用同一 trial identity composition。
 - WavLM-Large 冻结；ECAPA 输出 192 维；4 秒 crop；AAM margin=0.2、scale=30。
 - Query Attention 为 4 heads、temperature=0.3；未擅自加入论文未说明的 FFN/dropout。

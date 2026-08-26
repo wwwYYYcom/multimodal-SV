@@ -11,7 +11,7 @@ from .fisher import iter_manifest
 
 
 def nested_sample(pool: Sequence[str], n_values: Sequence[int], rng: random.Random) -> dict[int, list[str]]:
-    """一次采 max(N)，再取前缀，保证 U5 ⊂ U10 ⊂ U15。"""
+    """一次采 max(N)，再取前缀，保证 U1 ⊂ U5 ⊂ U10 ⊂ U15。"""
     ordered_n = sorted(set(int(value) for value in n_values))
     if not ordered_n or ordered_n[0] <= 0:
         raise ValueError("n_values 必须为正整数")
