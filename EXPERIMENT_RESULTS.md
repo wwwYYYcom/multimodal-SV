@@ -836,3 +836,14 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\consolidate_cach
 - GPU 快照：利用率 99%，显存 6,316/8,151 MiB，功耗 83.52 W。
 - D 盘剩余 24.93 GiB。
 - 按最近完整 epoch 的实际速度估计尚需约 36.5 小时，训练预计仍在 2026-08-27 09:00 +08:00 前后完成；完成后 watcher 自动开始 corrected embedding 和 Mean O-O N=5/10/15 评估。
+
+### 2026-08-26 09:06 训练进度更新
+
+- 状态：训练 PID `71796` 正常运行；后处理 watcher PID `83540` 正常等待，尚未生成 corrected embeddings 或 O-O 结果。
+- 已完整完成 epoch 0 至 17，即 18/30 个 epoch；最新完整 checkpoint `epoch_17.pt` 于 2026-08-26 08:10:31 +08:00 写入。
+- epoch 12 至 17 的完整 loss 依次为 `0.6263739847`、`0.5731074184`、`0.5280308967`、`0.4085137895`、`0.3763672326`、`0.3541229078`，下降趋势正常。
+- 当前为 epoch 索引 18，即第 19/30 个 epoch；实时日志约为 4,071/8,952 batch、global step 165,207/268,560，总 optimizer-step 进度约 61.52%，实时累计平均 loss 约 `0.3183`。
+- 最近原子 checkpoint：epoch 18、batch 4,064、global step 165,200、`epoch_complete=false`、`running_loss=1293.007419064641`；于 2026-08-26 09:06:00 +08:00 写入。
+- GPU 快照：利用率 96%，显存 6,432/8,151 MiB，功耗 86.00 W，SM 时钟 2,542 MHz。
+- D 盘剩余 52.02 GiB，足够保存剩余 epoch checkpoints 和后处理结果。
+- 按最近 epoch 实测速度估计尚需约 23.6 小时，预计训练于 2026-08-27 08:45 +08:00 前后完成，随后自动开始 corrected embedding 提取及 Mean O-O N=5/10/15 评估；该时间仍为动态估计。
