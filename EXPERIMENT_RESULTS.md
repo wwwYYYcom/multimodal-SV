@@ -701,6 +701,7 @@ git submodule update --init --recursive
 
 | N | target trials | non-target trials | EER | threshold | 论文 Mean O-O |
 |---:|---:|---:|---:|---:|---:|
+| 1 | 1,606 | 1,606 | 46.513076% | 0.495667 | 未报告（本地扩展） |
 | 5 | 1,606 | 1,606 | 38.480697% | 0.727445 | 3.87% |
 | 10 | 1,606 | 1,606 | 34.869240% | 0.780447 | 3.29% |
 | 15 | 1,606 | 1,606 | 30.946451% | 0.813190 | 3.09% |
@@ -709,6 +710,8 @@ git submodule update --init --recursive
 
 | 文件 | 字节数 | SHA-256 |
 |---|---:|---|
+| `results\o_o\mean_n1.csv` | 151,467 | `dba46626b97965cd6757758f06818ce3a156ffc865f6614e9bdc903d7450094b` |
+| `results\o_o\mean_n1.metrics.json` | 289 | `c9e60f12c26ba1cc9d601b70736e3785cd327f85fc985c52c2b54eb756a3ce16` |
 | `results\o_o\mean_n5.csv` | 150,790 | `73cc8ff555f14f72122cce04fc0018e6ceba0510553f15fba47638371e45c68e` |
 | `results\o_o\mean_n5.metrics.json` | 289 | `c888f164b87d387321b0f8757b25cc5395dc95d52175452c1a4dfa9056716557` |
 | `results\o_o\mean_n10.csv` | 150,457 | `e42855164ba6fbce0869b2b122b0af320d0fde1dd9da06667b2995e590c16405` |
@@ -869,3 +872,38 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\consolidate_cach
 - GPU 快照：利用率 100%，显存 6,623/8,151 MiB，功耗 82.81 W。
 - D 盘剩余 51.27 GiB。
 - 当前 epoch 预计约十分钟后完成；按最近 epoch 实测速度，完整训练仍预计于 2026-08-27 09:00 +08:00 前后结束，随后自动进行 corrected embedding 提取及 Mean O-O N=5/10/15 评估。
+
+## 20. E23：增加 N=1 单语句评估
+
+- 状态：实现与自动后处理接入完成；corrected N=1 指标等待 E22 训练完成后自动生成。
+- 用户决策时间：2026-08-26 22:42 +08:00；实现完成时间：2026-08-26 23:11:27 +08:00。
+- 定义：N=1 使用现有 max-N=15 trial 中 enrollment 和 target 各自的第一个 utterance；与 N=5/10/15 使用完全相同的 trial identity composition，满足 `U1 ⊂ U5 ⊂ U10 ⊂ U15`。
+- 论文边界：论文只报告 N=5/10/15；N=1 是用户要求的本地扩展，`configs\paper.yaml` 保持不变，不把 N=1 冒充论文结果。
+- 本地配置：`configs\local_fisher_p1.yaml` 和 `configs\local_fisher_p1_corrected.yaml` 的 `n_values` 更新为 `[1,5,10,15]`；CLI `score-mean --n` 同步接受 1。
+- trial 一致性：重新生成审计前后 `artifacts\trials\evaluation.jsonl` 的 SHA-256 均为 `e41c457d31be96a1a2f0fa66af67a553e1007a925ea077153fd4994f5e9646d2`，证明没有改变 3,212 个现有 trials 的身份或顺序。
+- 更新后的 trial audit：`n_values=[1,5,10,15]`、eligible speakers 1,606、ineligible 0、target trials 1,606、non-target trials 1,606；`evaluation.audit.json` 376 字节，SHA-256 `02287006cb97207cbc9cb754af9e7edc625df89a23f8697a5de6631ca2ef942d`。
+- 自动测试：固定 `pytorch` 环境下 `18 passed`；新增 N=1 prefix nesting 与单 utterance mean-scoring 测试；Python compileall、PowerShell AST 解析和 `git diff --check` 通过。
+- 代码 commit：`d886eec`（`feat: add single-utterance evaluation`）。
+- 旧 watcher PID `83540` 已在确认其命令行为 `run_o_o_after_training.ps1 -TrainingPid 71796` 后停止；训练 PID `71796` 始终正常运行，未被中断。
+- 新 watcher PID：`77800`，启动时间 2026-08-26 23:11:27 +08:00，状态 `waiting_for_training=true`。
+- 新 watcher 日志：`D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\results\runs\audio_corrected_p1\post_pipeline_n1.stdout.log`、`post_pipeline_n1.stderr.log`。
+- corrected 计划输出：`results\o_o_corrected\mean_n1.csv`、`mean_n1.metrics.json`，以及原定 N=5/10/15 文件；所有 N 共享 `artifacts\embeddings\original_evaluation_corrected.npz`。
+- 旧 E20 失效训练基线的端到端 N=1 验证已完成：3,212 trials，EER `46.51307596513076%`，threshold `0.4956672191619873`。该数值仅用于验证新增路径和观察旧模型趋势，不作为 corrected 复现结论。
+
+旧 E20 N=1 运行命令：
+
+```powershell
+& 'D:\codeAPP\anaconda3\envs\pytorch\python.exe' -m mmsv.cli score-mean --trials artifacts/trials/evaluation.jsonl --original-embeddings artifacts/embeddings/original_evaluation.npz --condition O-O --n 1 --output results/o_o/mean_n1.csv
+```
+
+关键代码指纹：
+
+| 文件 | 字节数 | SHA-256 |
+|---|---:|---|
+| `configs\local_fisher_p1.yaml` | 1,801 | `353069d5800deef5dbdb511d1ea89ba2d18fe3e452fcab3b2519eadf24996228` |
+| `configs\local_fisher_p1_corrected.yaml` | 2,040 | `4e15165f4a35774347a8319353caf1931cc614c960007b8e31a9016299693476` |
+| `src\mmsv\cli.py` | 10,217 | `2e42fa9e96f475bc2813fef9b17ea9049c6ceac0e2cf7ee989948d09ed44df78` |
+| `src\mmsv\data\trials.py` | 7,317 | `09a9fa0d47a7a1572b3d01a65a4ff46ca4889501ec0874012feecee2db0384e9` |
+| `scripts\run_o_o_after_training.ps1` | 1,973 | `f685740c72e50370f76dbc17cc3a38bc1470cd72bb8faba80b24e01b62d2758f` |
+| `tests\test_protocol.py` | 2,580 | `2e2594bdc6f80f32ee71fcec7de3878eae3019046d01e1b45c5bb4519e98f0e0` |
+| `tests\test_metrics.py` | 1,229 | `bff28cac79cd4194d74b00a083a7ba1b55ee4b998ff37570e0d8f72d239a879f` |
