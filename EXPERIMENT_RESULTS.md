@@ -907,3 +907,22 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\consolidate_cach
 | `scripts\run_o_o_after_training.ps1` | 1,973 | `f685740c72e50370f76dbc17cc3a38bc1470cd72bb8faba80b24e01b62d2758f` |
 | `tests\test_protocol.py` | 2,580 | `2e2594bdc6f80f32ee71fcec7de3878eae3019046d01e1b45c5bb4519e98f0e0` |
 | `tests\test_metrics.py` | 1,229 | `bff28cac79cd4194d74b00a083a7ba1b55ee4b998ff37570e0d8f72d239a879f` |
+
+## 21. E22 corrected 30-epoch 训练完成与后处理启动
+
+- 训练状态：完成；checkpoint 完整性验证通过。
+- 启动时间：2026-08-24 19:03:05 +08:00。
+- 完成时间：2026-08-27 09:18:59 +08:00；墙钟耗时约 62 小时 15 分 54 秒。
+- epoch 内计时总和：224,079.41655874252 秒，即约 62 小时 14 分 39 秒。
+- 完整规模：30/30 epochs、每 epoch 8,952 physical batches、global step 268,560；epoch 0 至 29 的独立 checkpoint 全部存在。
+- 最终训练数据：epoch 29、`epoch_complete=true`、batch 8,952/8,952、loss `0.20560660441443523`、learning rate `7.8125e-06`、该 epoch 耗时 `7533.646664857864` 秒。
+- 最终 `last.pt`：115,738,499 字节，SHA-256 `0c69749dbb51929054e3e57990b04d2e737cefd96902f1d0100e80b402313508`。
+- `epoch_29.pt`：115,741,587 字节，SHA-256 `92479d2a6551a32bdae42c2123d1db1146fd7128facfef4284cfe7a0c2b391c7`。
+- `train.jsonl`：9,433 字节，SHA-256 `026c180ff9498da7598cead377f05f7fdd8731f27b325ebab9989dbeabbc7115`。
+- 训练代码 commit：`e0ce0bff6df8a597faa993386e65518e9f0d1d70`；N=1 后处理扩展 commit：`d886eec`。
+- 后处理状态：watcher PID `77800` 已验证最终 checkpoint，并启动 Python embedding 提取进程 PID `17004`。
+- embedding 范围：evaluation trials 引用的 86,222 个 unique utterances；启动后 97 秒快照为约 817/86,222，端到端平均约 8.4 utterances/s。考虑逐条音频读取与推理波动，保守预计约 2.8 至 3 小时完成；tqdm 的短时瞬时速度不作为 ETA 依据。
+- 当前阶段 GPU 快照：embedding 逐 utterance 推理期间利用率瞬时约 4%，显存约 3,525/8,151 MiB；与 30-epoch batch 训练的高利用率不可直接比较。
+- D 盘剩余 49.74 GiB。
+- 待生成文件：`artifacts\embeddings\original_evaluation_corrected.npz`，以及 `results\o_o_corrected\mean_n1/n5/n10/n15.csv` 和对应 `.metrics.json`。本节不提前填写尚未生成的 EER。
+- 后处理日志：`results\runs\audio_corrected_p1\post_pipeline_n1.stdout.log` 和 `post_pipeline_n1.stderr.log`。
