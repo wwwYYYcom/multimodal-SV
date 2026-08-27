@@ -1019,7 +1019,7 @@ embedding 完整性与非塌缩诊断：
 
 ## 24. E25：evaluation 匿名化加速 A/B 与双进程续跑
 
-- 状态：加速方案筛选完成；正式路径确定为双 FP32 进程，等待 Git 提交后从已有 FLAC 断点启动。
+- 状态：加速方案筛选完成；正式双 FP32 进程已从已有 FLAC 断点启动并稳定运行。
 - 诊断与测速时间：2026-08-27 15:40:53 至 16:09:06 +08:00。
 - 原任务暂停点：2026-08-27 15:40:53 +08:00；保留 303/86,222 条正式 FLAC，共 13,563,981 字节，没有删除或覆盖。
 - 根因：上游 `InferenceWrapper` 将主模型 KV cache 固定为 `max_batch_size=1`，逐 utterance 自回归生成；原运行 GPU 利用率约 27%–36%。Fisher SPHERE 整通话解码已由本工程 4-entry LRU cache 缓解，不是当前第一瓶颈。
@@ -1035,6 +1035,10 @@ embedding 完整性与非塌缩诊断：
 - 正式运行方式：`scripts\anonymize_evaluation_dual.ps1` 启动两个互斥 plan slice；两 worker 完整后，`scripts\merge_anonymization_manifests.py` 按原 plan 顺序合并 manifest，运行 86,222 条完整性验证，再由原后处理 watcher 提取匿名 embedding 并评分 Mean O-A/A-A N=1/5/10/15。
 - 可恢复性：两个 worker 都跳过已有非空正式 FLAC；任一 worker 未产生完整 audit 时不合并、不评分，重新执行监督器即可续跑。
 - 自动测试：`21 passed`；Python compileall、两个 PowerShell AST 解析和 `git diff --check` 通过。
+- 加速实现 commit：`9beb126`（`perf: parallelize evaluation anonymization`）。
+- 正式续跑启动：2026-08-27 16:16:05 +08:00；监督器 PID `81472`，worker 1 PID `57148`，worker 2 PID `45832`，自动评分 watcher PID `86460`。
+- 正式运行目录：`results\runs\anonymization_evaluation\dual_20260827_161605_474`；监督日志为 `results\runs\anonymization_evaluation\dual_supervisor.stdout.log` 与 `.stderr.log`，自动评分日志为同目录下 `dual_post_scoring.stdout.log` 与 `.stderr.log`。
+- 启动后快照：worker 1 progress 317/44,950（包含跳过的 303 条）、worker 2 progress 16/41,272；正式输出 333 条、15,233,027 字节；GPU 利用率 76%、显存 6,670/8,151 MiB、功耗 41.23 W、温度 64°C，无 OOM 或推理异常。
 
 测速产物与代码指纹：
 
