@@ -32,6 +32,11 @@
 | 作者代码/split/trials | 当前自行固定并审计 | 官方论文仓库仍未发布精确协议 | 结果按本地范围报告，不能声称精确复现作者 trial |
 | SPHERE decoder | shorten-capable decoder | 已安装 `desphere[fast]`；未检测到 sph2pipe | 可运行；sph2pipe 的按段解码会更快 |
 
+## 进行中
+
+- evaluation StreamVoiceAnon 100 条 GPU 基准已通过；完整 86,222 条匿名化于 2026-08-27 15:29:06 +08:00 启动，预计约 127.7 小时、5.85 GB。
+- 完整生成结束后将自动校验全部输出、提取匿名 embeddings，并计算 Mean O-A/A-A 的 N=1/5/10/15 EER。
+
 ## 未完成
 
 - 按已生成计划批量匿名化 Fisher Part 1，完成 semi-informed 训练和 O-A/A-A 表格。

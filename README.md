@@ -124,6 +124,8 @@ mmsv score-mean --trials artifacts/trials/evaluation.jsonl --original-embeddings
 
 截至 2026-08-27，corrected Mean O-O 已完成。Fisher Part 1 范围的 N=1/5/10/15 EER 分别为 `15.5044/4.1719/3.1133/2.9265%`；论文报告的 Mean N=5/10/15 为 `3.87/3.29/3.09%`。N=1 是本地扩展，完整产物和差异分析见实验总账第 22 节。
 
+evaluation StreamVoiceAnon 完整匿名化已在后台运行。100 条 CUDA 基准的实时系数为 1.357，预计 86,222 条约需 127.7 小时、占用约 5.85 GB；监督流程会在生成结束后自动校验，并继续提取匿名 embeddings 和评分 Mean O-A/A-A N=1/5/10/15。
+
 ## Git 版本管理
 
 主分支为 `main`，复现实验基线标签为 `v0.1.0-reproduction-baseline`。StreamVoiceAnon 使用 submodule 固定版本；clone 时应同时初始化 submodule：

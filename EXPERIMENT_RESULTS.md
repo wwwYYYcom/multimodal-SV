@@ -980,3 +980,39 @@ embedding 完整性与非塌缩诊断：
 | `results\runs\audio_corrected_p1\post_pipeline_n1.stderr.log` | 2,706,613 | `114970b6b0caa231db5da11e62dcb99b426a33ef962402aad51b6fb8f5323fa3` |
 
 版本化策略：embedding、checkpoint 和逐步日志继续由 `.gitignore` 排除，但其绝对路径、大小和 SHA-256 已记录；8 个 corrected score/metrics 文件与本节摘要进入 Git。下一阶段为 evaluation 匿名化、O-A/A-A 和 corrected semi-informed 训练；Mean O-O 完成不等于整篇论文全部复现完成。
+
+## 23. E24：evaluation StreamVoiceAnon GPU 基准与完整任务启动
+
+- 状态：100 条基准完成并通过；完整 86,222 条生成进行中。
+- 数据范围：evaluation trials 引用的 86,222 条 Fisher Part 1 utterances，共 94.14482750000104 小时；匿名目标仅来自 LibriSpeech `train-clean-360` 的 99,278 条大于 4 秒 reference pool。
+- 模型：StreamVoiceAnon `dual_ar_delay_0_8.pth`，CUDA，delay 2 frames，speaker embedding mixing `alpha=1.0`，输出 16 kHz FLAC。
+- 基准开始：2026-08-27 15:23:17 +08:00。
+- 基准完成：2026-08-27 15:29:06 +08:00；墙钟 347.6405532 秒。
+- 基准结果：processed 100、generated 100、skipped 0、missing 0、unreadable 0、wrong format 0、nonfinite 0；manifest 行数与 plan 顺序完全一致。
+- 基准 source/output 时长：256.24 / 253.7974375 秒；输出 4,424,036 字节。
+- duration relative error：P50 `0.9874%`、P95 `3.4072%`、最大 `3.9170%`。
+- 实时系数：`1.3566990056`；按基准投影完整生成约 `127.7262` 小时，即约 5.32 天，动态预计 2026-09-01 23:13 +08:00 前后完成。
+- 完整输出空间投影：5,851,546,916 字节，约 5.45 GiB；启动时 D 盘空闲 53,225,635,840 字节，投影低于 80% 安全阈值。
+- 完整任务启动：2026-08-27 15:29:06 +08:00；监督进程 PID `87012`、当前完整生成 Python PID `74380`。
+- 进度快照：2026-08-27 15:32:08 +08:00，156/86,222 个 FLAC、6,645,735 字节；GPU 利用率 27%、显存 3,784/8,151 MiB、功耗 32.35 W。低于训练阶段利用率是自回归逐 utterance 生成和音频 I/O 的预期表现。
+- 正式输出目录：`D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\artifacts\anonymized\evaluation`。
+- 正式 manifest/audit/progress：`artifacts\metadata\fisher_anonymized_evaluation_manifest.csv`、`.audit.json`、`.progress.jsonl`。
+- 监督日志：`results\runs\anonymization_evaluation\supervisor.stdout.log`、`supervisor.stderr.log`。
+- 自动后处理 watcher PID `59036`：等待生成 PID `87012`；仅在 audit 与 `final.validation.json` 均确认 86,222 条完整后，提取 `artifacts\embeddings\anonymized_evaluation_corrected.npz`，然后生成 `results\o_a_corrected` 和 `results\a_a_corrected` 下 N=1/5/10/15 Mean 结果。
+- 后处理日志：`results\runs\anonymization_evaluation\post_scoring.stdout.log`、`post_scoring.stderr.log`。
+- 安全行为：基准或完整校验失败时不启动下一阶段；已生成的非空 FLAC 会在重启时跳过，可断点续跑。
+- 自动测试：`19 passed`；Python compileall、PowerShell AST 解析与 `git diff --check` 通过。
+- 监督/验证代码 commit：`a080974`；自动 O-A/A-A 后处理 commit：`1c036c5`。
+
+基准产物与代码指纹：
+
+| 文件 | 字节数 | SHA-256 |
+|---|---:|---|
+| `results\runs\anonymization_evaluation\benchmark.manifest.csv` | 22,718 | `ebe62b4b158274b0f818586797c91483695e5da4d8fdfca1373570be8e97f53a` |
+| `results\runs\anonymization_evaluation\benchmark.audit.json` | 556 | `e81e0eb15bbe32ff3dde797affa8d90207f1abb21d82f4ce290049ac11ca6377` |
+| `results\runs\anonymization_evaluation\benchmark.progress.jsonl` | 20,391 | `4f4f8fb93f5168bae0b65e4787c0d5060b11636460b102eed0e03c669656e91e` |
+| `results\runs\anonymization_evaluation\benchmark.validation.json` | 996 | `3425828171e524f320dd7519ad26e0139c106a49a7b92d9085eae85b31d50c5c` |
+| `scripts\benchmark_then_anonymize_evaluation.ps1` | 3,538 | `6d80d6aa22db36b76389d87ca144be317bfc85aca0c6d6ac6fe871da1556b2e4` |
+| `scripts\validate_anonymization_outputs.py` | 6,033 | `62e65a569ffef72728accf82acdf9397aa01b79ad876b7ba4185eb94d389bb3c` |
+| `tests\test_anonymization_validation.py` | 1,178 | `7f5bbc8391950b9fe3966ffb5b3b176806b902962efd273dc779e433f644e141` |
+| `scripts\run_anonymized_scoring_after_generation.ps1` | 2,847 | `35a2aef118f635ba5d09a64c27ca67db950bf9ce2f6dcc58637fd555f261126a` |
