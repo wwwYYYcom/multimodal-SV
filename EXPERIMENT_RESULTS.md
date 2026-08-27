@@ -926,3 +926,57 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\consolidate_cach
 - D 盘剩余 49.74 GiB。
 - 待生成文件：`artifacts\embeddings\original_evaluation_corrected.npz`，以及 `results\o_o_corrected\mean_n1/n5/n10/n15.csv` 和对应 `.metrics.json`。本节不提前填写尚未生成的 EER。
 - 后处理日志：`results\runs\audio_corrected_p1\post_pipeline_n1.stdout.log` 和 `post_pipeline_n1.stderr.log`。
+
+## 22. E22 corrected Mean O-O 最终结果
+
+- 状态：完成；30-epoch 训练、checkpoint 校验、trial-filtered embedding 提取及 N=1/5/10/15 Mean O-O 评分全部成功。
+- embedding 提取开始：2026-08-27 09:19:06 +08:00。
+- embedding 写入完成：2026-08-27 12:02:33 +08:00；86,222 utterances，耗时约 2 小时 43 分 27 秒，端到端平均约 8.8 utterances/s。
+- pipeline 完成时间：2026-08-27 12:02:50 +08:00。
+- 数据范围：仅 Fisher Part 1；LibriSpeech `train-clean-360` 不参与 O-O 训练或评分。
+- trial：1,606 target + 1,606 non-target，共 3,212；speaker-disjoint、target trial call-disjoint；N=1/5/10/15 使用嵌套前缀。
+- checkpoint：`results\runs\audio_corrected_p1\last.pt`，epoch 29 完整，global step 268,560，SHA-256 `0c69749dbb51929054e3e57990b04d2e737cefd96902f1d0100e80b402313508`。
+
+最终 EER：
+
+| N | target | non-target | EER | threshold | 论文 Mean O-O | 本地 - 论文 |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 1,606 | 1,606 | 15.504359% | 0.148990 | 未报告 | — |
+| 5 | 1,606 | 1,606 | 4.171856% | 0.260938 | 3.87% | +0.301856 pp |
+| 10 | 1,606 | 1,606 | 3.113325% | 0.286501 | 3.29% | -0.176675 pp |
+| 15 | 1,606 | 1,606 | 2.926526% | 0.289310 | 3.09% | -0.163474 pp |
+
+与 E20 失效基线相比，N=1/5/10/15 EER 分别相对下降 `66.67%/89.16%/91.07%/90.54%`。N=5 比论文高 0.302 个百分点；N=10 和 N=15 分别比论文低 0.177 和 0.163 个百分点。三项均已进入论文同一数量级，且 EER 随 N 增加单调下降。由于本工程只使用 Fisher Part 1、自建 speaker split/trials，数值接近或略优不代表对作者完整数据协议的精确复现。
+
+embedding 完整性与非塌缩诊断：
+
+| 检查项 | 结果 |
+|---|---:|
+| shape | 86,222 × 192 |
+| unique IDs | 86,222 |
+| finite | true |
+| norm mean / min / max | 1.000000 / 1.000000 / 1.000000 |
+| PC1 variance fraction | 4.3922% |
+| top-10 variance fraction | 26.5968% |
+| participation ratio | 59.4209 |
+| 10,000 random-pair cosine mean / std | 0.00899 / 0.13235 |
+
+旧 E20 的 PC1 方差占比为 73.36%、participation ratio 仅 1.81；corrected embedding 的上述结果证明严重表示塌缩已消除。
+
+全部最终输出：
+
+| 文件 | 字节数 | SHA-256 |
+|---|---:|---|
+| `artifacts\embeddings\original_evaluation_corrected.npz` | 61,680,027 | `9c8c944a758f92dac45b4225f73317a83113d6a3ad744a5eac2580f2fb314ff3` |
+| `results\o_o_corrected\mean_n1.csv` | 153,149 | `bf0dbfa2db82e7ab9f373707182ea5eddc533ff3bc06dfe9d19c12a0d78bf512` |
+| `results\o_o_corrected\mean_n1.metrics.json` | 301 | `1ec398b172e572546f735314b2f702863fc3c933250bc3c05dac4d642050cd68` |
+| `results\o_o_corrected\mean_n5.csv` | 152,351 | `2d27469d128bc388ffb37037d8be65f4bfc4f8c5ffe26bf28c78f938b53ad4bd` |
+| `results\o_o_corrected\mean_n5.metrics.json` | 298 | `516ff17bc51619daf3b8730c475b437714e383e54af921c7dfa3b0f49014b0c7` |
+| `results\o_o_corrected\mean_n10.csv` | 152,287 | `972991855ca3035f021332d05aedb83ebad786ec34723082626b353eac7246f5` |
+| `results\o_o_corrected\mean_n10.metrics.json` | 305 | `5cd68230750dc1a2f902688501c1753b0f63a48a407f27b64991533becaefec3` |
+| `results\o_o_corrected\mean_n15.csv` | 152,268 | `7920646487a3c966e64ca3f46b157abbeda713541c91302ab57fc9c7f093f46a` |
+| `results\o_o_corrected\mean_n15.metrics.json` | 303 | `e2941dfc8809ea61eee01121a8c66e8176727dfeb8d4e31ec3f303e500025726` |
+| `results\runs\audio_corrected_p1\post_pipeline_n1.stdout.log` | 1,892 | `3571feac8f960b33c2b9004b6d2b379d0351fd2c3aefa6e8d292d216611b4826` |
+| `results\runs\audio_corrected_p1\post_pipeline_n1.stderr.log` | 2,706,613 | `114970b6b0caa231db5da11e62dcb99b426a33ef962402aad51b6fb8f5323fa3` |
+
+版本化策略：embedding、checkpoint 和逐步日志继续由 `.gitignore` 排除，但其绝对路径、大小和 SHA-256 已记录；8 个 corrected score/metrics 文件与本节摘要进入 Git。下一阶段为 evaluation 匿名化、O-A/A-A 和 corrected semi-informed 训练；Mean O-O 完成不等于整篇论文全部复现完成。

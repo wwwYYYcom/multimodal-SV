@@ -1,4 +1,4 @@
-# 复现状态（2026-08-23）
+# 复现状态（2026-08-27）
 
 > 本文件只保留进度摘要。唯一完整实验总账是 [EXPERIMENT_RESULTS.md](EXPERIMENT_RESULTS.md)，所有后续实验结果均追加到该文件。
 
@@ -20,6 +20,7 @@
 - StreamVoiceAnon 主模型及 4 个配套权重均已下载并完成文件指纹审计；离线模型初始化无 missing/unexpected keys。
 - StreamVoiceAnon CPU 端到端 smoke 已成功生成 1 条 16 kHz FLAC；重复运行验证可跳过已有输出。
 - 已生成 evaluation 匿名化计划（86,222 utterances / 94.14 小时）和 semi-informed train 计划（7,272 call-sides / 7.65 小时，覆盖 5,231 speakers）。
+- corrected WavLM-ECAPA Mean O-O 已完成：30 epochs、268,560 steps；N=1/5/10/15 EER 分别为 `15.5044/4.1719/3.1133/2.9265%`。N=5/10/15 已达到论文 Mean O-O 的相近量级。
 
 ## 确定的数据范围与剩余限制
 
@@ -27,13 +28,12 @@
 |---|---|---|---|
 | Fisher | Part 1 | LDC2004S13/T19 Part 1 已就绪 | 这是最终实验范围，不再等待 Part 2 |
 | LibriSpeech target pool | train-clean-360 | 99,278 条 >4 s utterances 已筛选 | 这是最终实验范围，不再等待 other-500 |
-| StreamVoiceAnon checkpoint | 主模型 + ASR tokenizer + Firefly + CAMPPlus + Spark encoder | 5 个权重均已下载并校验 | CPU/GPU runner 已接通；批量运行待 O-O 训练释放 GPU |
+| StreamVoiceAnon checkpoint | 主模型 + ASR tokenizer + Firefly + CAMPPlus + Spark encoder | 5 个权重均已下载并校验 | CPU/GPU runner 已接通；O-O 已完成，GPU 可转入批量匿名化阶段 |
 | 作者代码/split/trials | 当前自行固定并审计 | 官方论文仓库仍未发布精确协议 | 结果按本地范围报告，不能声称精确复现作者 trial |
 | SPHERE decoder | shorten-capable decoder | 已安装 `desphere[fast]`；未检测到 sph2pipe | 可运行；sph2pipe 的按段解码会更快 |
 
 ## 未完成
 
-- 在固定数据范围内完成 30 epoch O-O 训练、embedding 提取和 EER 表格。
 - 按已生成计划批量匿名化 Fisher Part 1，完成 semi-informed 训练和 O-A/A-A 表格。
 - Whisper/LUAR/prosody/RJCA 等 Level 2-3；说明文档明确建议 audio 闭环稳定后再做。
 
