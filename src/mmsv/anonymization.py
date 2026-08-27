@@ -6,6 +6,7 @@ import os
 import random
 import sys
 import tempfile
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
@@ -146,6 +147,10 @@ def _load_streamvoice_wrapper(
     streamvoice_root: Path,
     config_path: Path,
     checkpoint_path: Path,
+    compile_ar: bool = False,
+    compile_encoder: bool = False,
+    compile_decoder: bool = False,
+    fp16: bool = False,
 ) -> Any:
     root_text = str(streamvoice_root)
     if root_text not in sys.path:
@@ -153,7 +158,26 @@ def _load_streamvoice_wrapper(
     with _working_directory(streamvoice_root):
         from evaluations.infer_arvc import InferenceWrapper
 
-        wrapper = InferenceWrapper(str(config_path), str(checkpoint_path))
+        if compile_ar or compile_encoder or compile_decoder:
+            # The upstream module enables coordinate-descent autotuning globally.
+            # On this Windows environment its static CUDA launcher overflows a C long.
+            # Disabling it changes kernel selection only, not model computation.
+            import torch
+
+            torch._inductor.config.coordinate_descent_tuning = False
+
+        wrapper = InferenceWrapper(
+            str(config_path),
+            str(checkpoint_path),
+            compile_ar=compile_ar,
+            compile_encoder=compile_encoder,
+            compile_decoder=compile_decoder,
+            fp16=fp16,
+        )
+        if compile_ar or compile_encoder or compile_decoder:
+            # ARVCWrapper.compile_ar_decode_fn() turns this back on while it creates
+            # the lazy compiled callable, so apply the Windows-safe value again.
+            torch._inductor.config.coordinate_descent_tuning = False
     if wrapper.device.type == "cpu":
         # 上游固定使用 FP16 KV cache；CPU autocast 会关闭并产生 FP32 source。
         decoder_model = wrapper.model.decoder.model
@@ -174,6 +198,11 @@ def anonymize_plan(
     alpha: float = 1.0,
     sph2pipe: str | None = None,
     limit: int | None = None,
+    start_index: int = 0,
+    compile_ar: bool = False,
+    compile_encoder: bool = False,
+    compile_decoder: bool = False,
+    fp16: bool = False,
 ) -> dict[str, object]:
     import soundfile as sf
     from scipy.signal import resample_poly
@@ -185,10 +214,21 @@ def anonymize_plan(
         config = root / config
     if not checkpoint.is_absolute():
         checkpoint = root / checkpoint
-    wrapper = _load_streamvoice_wrapper(root, config, checkpoint)
+    wrapper = _load_streamvoice_wrapper(
+        root,
+        config,
+        checkpoint,
+        compile_ar=compile_ar,
+        compile_encoder=compile_encoder,
+        compile_decoder=compile_decoder,
+        fp16=fp16,
+    )
 
     with Path(plan_csv).open("r", encoding="utf-8", newline="") as handle:
         rows = list(csv.DictReader(handle))
+    if start_index < 0:
+        raise ValueError("start_index must be non-negative")
+    rows = rows[start_index:]
     if limit is not None:
         rows = rows[:limit]
     if not rows:
@@ -200,7 +240,8 @@ def anonymize_plan(
     completed_rows: list[dict[str, str]] = []
     generated = 0
     skipped = 0
-    for index, row in enumerate(rows, start=1):
+    for index, row in enumerate(rows, start=start_index + 1):
+        item_started = time.perf_counter()
         destination = Path(row["output_audio_path"])
         destination.parent.mkdir(parents=True, exist_ok=True)
         if destination.exists() and destination.stat().st_size > 0:
@@ -258,6 +299,7 @@ def anonymize_plan(
                 "utt_id": row["utt_id"],
                 "output": str(destination.resolve()),
                 "seconds": info.duration,
+                "elapsed_seconds": time.perf_counter() - item_started,
             }, ensure_ascii=False) + "\n")
 
     with manifest_path.open("w", encoding="utf-8", newline="") as handle:
@@ -278,6 +320,11 @@ def anonymize_plan(
         "sample_rate": sample_rate,
         "delay": delay,
         "alpha": alpha,
+        "start_index": start_index,
+        "compile_ar": compile_ar,
+        "compile_encoder": compile_encoder,
+        "compile_decoder": compile_decoder,
+        "fp16": fp16,
     }
     manifest_path.with_suffix(".audit.json").write_text(
         json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"

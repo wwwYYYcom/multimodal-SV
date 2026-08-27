@@ -91,6 +91,9 @@ mmsv plan-anonymization --config configs/local_fisher_p1.yaml --manifest artifac
 mmsv plan-anonymization --config configs/local_fisher_p1.yaml --manifest artifacts/metadata/fisher_manifest.csv --reference-pool artifacts/metadata/librispeech_target_pool.csv --splits artifacts/metadata/speaker_splits.csv --split-name train --one-per-call-side --audio-output-root artifacts/anonymized/train --output artifacts/anonymization/train_one_per_call_side_plan.csv
 
 mmsv anonymize-streamvoice --plan artifacts/anonymization/evaluation_plan.csv --output-manifest artifacts/metadata/fisher_anonymized_evaluation_manifest.csv --streamvoice-root third_party/StreamVoiceAnon --delay 2 --alpha 1.0
+
+# RTX 5060 8 GiB 上按 source 总时长平衡的双进程 evaluation 续跑
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/anonymize_evaluation_dual.ps1
 ```
 
 runner 会跳过已经存在的非空 FLAC、追加 progress JSONL，并将 StreamVoiceAnon 的 44.1 kHz 输出立即转为 16 kHz FLAC。批量匿名化与 O-O 训练不要同时占用 GPU。
@@ -124,7 +127,7 @@ mmsv score-mean --trials artifacts/trials/evaluation.jsonl --original-embeddings
 
 截至 2026-08-27，corrected Mean O-O 已完成。Fisher Part 1 范围的 N=1/5/10/15 EER 分别为 `15.5044/4.1719/3.1133/2.9265%`；论文报告的 Mean N=5/10/15 为 `3.87/3.29/3.09%`。N=1 是本地扩展，完整产物和差异分析见实验总账第 22 节。
 
-evaluation StreamVoiceAnon 完整匿名化已在后台运行。100 条 CUDA 基准的实时系数为 1.357，预计 86,222 条约需 127.7 小时、占用约 5.85 GB；监督流程会在生成结束后自动校验，并继续提取匿名 embeddings 和评分 Mean O-A/A-A N=1/5/10/15。
+evaluation StreamVoiceAnon 已切换为两个 FP32 进程按 source 总时长平衡续跑。短基准峰值显存 6,754 MiB、相对串行约加速 1.29 倍，86,222 条投影由约 127.7 小时降至约 98.9 小时；监督流程会在生成结束后自动合并并校验 manifest，随后提取匿名 embeddings 和评分 Mean O-A/A-A N=1/5/10/15。
 
 ## Git 版本管理
 

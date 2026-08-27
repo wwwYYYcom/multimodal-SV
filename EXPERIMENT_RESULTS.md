@@ -1016,3 +1016,39 @@ embedding 完整性与非塌缩诊断：
 | `scripts\validate_anonymization_outputs.py` | 6,033 | `62e65a569ffef72728accf82acdf9397aa01b79ad876b7ba4185eb94d389bb3c` |
 | `tests\test_anonymization_validation.py` | 1,178 | `7f5bbc8391950b9fe3966ffb5b3b176806b902962efd273dc779e433f644e141` |
 | `scripts\run_anonymized_scoring_after_generation.ps1` | 2,847 | `35a2aef118f635ba5d09a64c27ca67db950bf9ce2f6dcc58637fd555f261126a` |
+
+## 24. E25：evaluation 匿名化加速 A/B 与双进程续跑
+
+- 状态：加速方案筛选完成；正式路径确定为双 FP32 进程，等待 Git 提交后从已有 FLAC 断点启动。
+- 诊断与测速时间：2026-08-27 15:40:53 至 16:09:06 +08:00。
+- 原任务暂停点：2026-08-27 15:40:53 +08:00；保留 303/86,222 条正式 FLAC，共 13,563,981 字节，没有删除或覆盖。
+- 根因：上游 `InferenceWrapper` 将主模型 KV cache 固定为 `max_batch_size=1`，逐 utterance 自回归生成；原运行 GPU 利用率约 27%–36%。Fisher SPHERE 整通话解码已由本工程 4-entry LRU cache 缓解，不是当前第一瓶颈。
+- 公平样本：evaluation plan 从零基下标 303 开始；单进程各 20 条，前 3 条排除为预热；双进程分别处理下标 303–322 与 323–342，共 40 条且输出到互不重叠的独立 benchmark 目录。
+- 单进程 FP32 基线：20 条墙钟 93.0427 秒；排除 3 条后 measured audio 56.74994 秒、elapsed 67.89395 秒、稳态 RTF `1.1963705`、0.25039 items/s；20/20 可读、16 kHz、finite。
+- `torch.compile` 结论：不采用。首次因 Windows 默认临时路径过长失败；短缓存路径解决后，AR、encoder 和 decoder 均在 PyTorch 2.9.1 + Triton 的 Windows static CUDA launcher 触发 `OverflowError: Python int too large to convert to C long`。所有失败均发生在第一条测试输出落盘前，没有污染正式结果。
+- 单进程 FP16：20 条墙钟 94.1438 秒；稳态 RTF `1.2231524`，比 FP32 慢约 2.24%；20/20 输出有效。实测运行中总显存约 3,393 MiB，FP32 基线约 3,920 MiB。
+- 双 FP16：40 条墙钟 138.5460 秒、峰值总显存 5,783 MiB、GPU 利用率快照 77%；两 worker 均 return code 0，40/40 输出有效；相对两个单进程 FP32 基线串行墙钟加速 `1.3431×`。
+- 双 FP32：40 条墙钟 144.0900 秒、峰值总显存 6,754 MiB、GPU 利用率快照 76%；两 worker 均 return code 0，40/40 输出有效；相对串行基线加速 `1.2915×`。
+- 选择：双 FP32。它只比双 FP16 慢约 4%，但与已生成的 303 条和原始 StreamVoiceAnon 路径保持相同权重精度；峰值仍低于 8,151 MiB，约留 1,397 MiB 余量。三进程未采用，因为按双进程峰值推算会接近或超过显存上限。
+- 正式分片：按 source 总时长而不是条数平衡；split index `44,950`。worker 1 为 44,950 条 / 169,467.879 秒，worker 2 为 41,272 条 / 169,453.500 秒。
+- 新投影：按双 FP32 加速比，完整墙钟约 `127.7262 / 1.2915 = 98.90` 小时，即约 4.12 天；已有 303 条会略微缩短该时间。该值是短基准投影，不作为完成时间保证。
+- 正式运行方式：`scripts\anonymize_evaluation_dual.ps1` 启动两个互斥 plan slice；两 worker 完整后，`scripts\merge_anonymization_manifests.py` 按原 plan 顺序合并 manifest，运行 86,222 条完整性验证，再由原后处理 watcher 提取匿名 embedding 并评分 Mean O-A/A-A N=1/5/10/15。
+- 可恢复性：两个 worker 都跳过已有非空正式 FLAC；任一 worker 未产生完整 audit 时不合并、不评分，重新执行监督器即可续跑。
+- 自动测试：`21 passed`；Python compileall、两个 PowerShell AST 解析和 `git diff --check` 通过。
+
+测速产物与代码指纹：
+
+| 文件 | 字节数 | SHA-256 |
+|---|---:|---|
+| `results\runs\anonymization_compile_benchmark\20260827_154743\benchmark.json` | 3,733 | `6f4d00fb4ffe4f1a10c77d257b03e5b986ecd2bdac8a9d0e2bd341effdc27a63` |
+| `results\runs\anonymization_compile_benchmark\20260827_155919\benchmark.json` | 2,440 | `217c320df4951f228d9fdb90c7c89eb9776dac96a08d91f91e4dba623f9ea216` |
+| `results\runs\anonymization_dual_fp16_benchmark\20260827_160244_971\benchmark.json` | 15,612 | `ce4a0308f486fc5e0114225cc7cb56b75660550ad0a2f50d0dd11d6a969251a9` |
+| `results\runs\anonymization_dual_fp16_benchmark\20260827_160641_860\benchmark.json` | 14,876 | `622a9e7bbf92fddaa4e51e64af358885edd9292883c15f9a6a8843a5c76d4808` |
+| `src\mmsv\anonymization.py` | 13,184 | `8db094319625460c9f8cb0ca9fe093003278d4ddac09e4688baf82144c0233b8` |
+| `src\mmsv\cli.py` | 10,662 | `99d8e220b3aabe5e21d77cf880205a96128a0d1269433df3ae183d9031f89556` |
+| `scripts\benchmark_streamvoice_compile.py` | 9,376 | `a3b2de4d4aed2b28d6c853ee1ea8e72134d10a55ebaac1973a52a6c0860f9bff` |
+| `scripts\benchmark_dual_fp16.ps1` | 4,263 | `6495143541b889db0cf8ba5fee153cf1638385631a7e6731117fb2080b212914` |
+| `scripts\anonymize_evaluation_dual.ps1` | 5,020 | `64adbfcf6e2756254675443d2c7339dea1704da0597872ad5dd370865d6abad4` |
+| `scripts\merge_anonymization_manifests.py` | 2,949 | `9a51a10235d55506fec5483c6528d846638d394eb2d1b2cfff6da168a4754b70` |
+| `tests\test_anonymization.py` | 4,727 | `0011b3cdf63eca7673f4599e115f3defce7ba7987752206e58139fa885535466` |
+| `tests\test_anonymization_validation.py` | 2,994 | `5eb24d5996031fb0f14156a3f075ea215e8982484e7aa30c71023a51d895886a` |

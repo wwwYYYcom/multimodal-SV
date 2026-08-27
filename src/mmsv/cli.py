@@ -130,6 +130,11 @@ def _anonymize(args: argparse.Namespace) -> None:
         args.alpha,
         args.sph2pipe,
         args.limit,
+        args.start_index,
+        args.compile_ar,
+        args.compile_encoder,
+        args.compile_decoder,
+        args.fp16,
     ))
 
 
@@ -213,6 +218,11 @@ def build_parser() -> argparse.ArgumentParser:
     command.add_argument("--alpha", type=float, default=1.0)
     command.add_argument("--sph2pipe")
     command.add_argument("--limit", type=int)
+    command.add_argument("--start-index", type=int, default=0)
+    command.add_argument("--compile-ar", action="store_true")
+    command.add_argument("--compile-encoder", action="store_true")
+    command.add_argument("--compile-decoder", action="store_true")
+    command.add_argument("--fp16", action="store_true")
     command.set_defaults(func=_anonymize)
 
     command = subparsers.add_parser("train-audio", help="训练 WavLM-Large + ECAPA-TDNN")
