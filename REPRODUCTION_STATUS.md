@@ -32,10 +32,14 @@
 | 作者代码/split/trials | 当前自行固定并审计 | 官方论文仓库仍未发布精确协议 | 结果按本地范围报告，不能声称精确复现作者 trial |
 | SPHERE decoder | shorten-capable decoder | 已安装 `desphere[fast]`；未检测到 sph2pipe | 可运行；sph2pipe 的按段解码会更快 |
 
-## 进行中
+## 最新完成状态
 
 - evaluation StreamVoiceAnon 已于 2026-08-30 09:47:04 +08:00 完成：86,222 条、5.585 GB，最终校验 valid，missing/unreadable/wrong-format/nonfinite 均为 0，实际双进程 RTF 0.6956。
-- 首次自动 embedding 提取因 Hugging Face SSL 中断失败；已强制离线使用本地 WavLM 缓存并通过 1 条 smoke，正在恢复全量匿名 embeddings 和 Mean O-A/A-A N=1/5/10/15 评分。
+- 匿名 embedding 与 Mean O-A/A-A N=1/5/10/15 已于 2026-08-30 11:54:11 +08:00 全部完成。
+- O-A N=1/5/10/15 EER：`43.5243/38.4184/36.7995/36.6750%`。
+- lazy-informed A-A N=1/5/10/15 EER：`47.3848/39.3524/31.5068/25.7783%`。
+- 结果目录为 `results/o_a_corrected`、`results/a_a_corrected`；完整指标、文件路径、日志与 SHA-256 见 `EXPERIMENT_RESULTS.md` 第 26 节。
+- 当前无后台计算进程，GPU 空闲。
 
 ## 未完成
 

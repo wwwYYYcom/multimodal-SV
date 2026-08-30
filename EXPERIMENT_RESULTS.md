@@ -1083,3 +1083,85 @@ embedding 完整性与非塌缩诊断：
 | `artifacts\metadata\fisher_anonymized_evaluation_manifest.audit.json` | 2,412 | `d5ed9527fe41de233579f7a577c553fc11b528a39f5e86a6b7bcc60b1e2df9c6` |
 | `results\runs\anonymization_evaluation\offline_embedding_smoke.npz` | 1,203 | `2f3d2a8cc756b37b4980333a3725917b171e55efe64f0ca30547c51e267cfb11` |
 | `scripts\run_anonymized_scoring_after_generation.ps1` | 2,945 | `3736de23b7b3a2e0d7093298ca925aa542ff8439c36bcf943c39adc79d8ee8f3` |
+
+## 26. E27：corrected Mean O-A / lazy-informed A-A 最终结果
+
+- 状态：完成。匿名 embedding 提取以及 O-A/A-A 的 N=1/5/10/15 Mean 评分全部成功。
+- 后处理启动：2026-08-30 10:50:44 +08:00。
+- embedding 写入完成：2026-08-30 11:53:46 +08:00；86,222 utterances，tqdm 推理耗时约 1:02:48，平均约 22.88 utterances/s。
+- pipeline 完成：2026-08-30 11:54:11 +08:00；从启动到全部评分完成约 1:03:27。
+- 运行环境：`HF_HUB_OFFLINE=1`、`TRANSFORMERS_OFFLINE=1`，使用本地 WavLM-Large 缓存；正式 checkpoint 为 `results\runs\audio_corrected_p1\last.pt`。
+- 运行入口：`scripts\run_anonymized_scoring_after_generation.ps1`。该脚本依次调用 `mmsv.cli extract-embeddings`，再对 O-A/A-A 和 N=1/5/10/15 调用 `mmsv.cli score-mean`。
+- trials：`artifacts\trials\evaluation.jsonl`；每项 1,606 target + 1,606 non-target，共 3,212 trials；N 使用同一 nested enrollment 前缀。
+- 原始 embedding：`artifacts\embeddings\original_evaluation_corrected.npz`。
+- 匿名 embedding：`artifacts\embeddings\anonymized_evaluation_corrected.npz`。
+- O-A 输出目录：`D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\results\o_a_corrected`。
+- A-A 输出目录：`D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\results\a_a_corrected`。
+- 日志：`results\runs\anonymization_evaluation\dual_post_scoring_retry.stdout.log` 和 `dual_post_scoring_retry.stderr.log`。
+
+最终 EER：
+
+| 条件 | N | target | non-target | EER | threshold | 论文 Mean | 本地 - 论文 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| O-A | 1 | 1,606 | 1,606 | 43.524284% | 0.033054 | 未报告 | — |
+| O-A | 5 | 1,606 | 1,606 | 38.418431% | 0.059750 | 40.61% | -2.191569 pp |
+| O-A | 10 | 1,606 | 1,606 | 36.799502% | 0.069051 | 39.77% | -2.970498 pp |
+| O-A | 15 | 1,606 | 1,606 | 36.674969% | 0.069988 | 39.30% | -2.625031 pp |
+| A-A lazy-informed | 1 | 1,606 | 1,606 | 47.384807% | 0.330420 | 未报告 | — |
+| A-A lazy-informed | 5 | 1,606 | 1,606 | 39.352428% | 0.701010 | 43.77% | -4.417572 pp |
+| A-A lazy-informed | 10 | 1,606 | 1,606 | 31.506849% | 0.810067 | 40.26% | -8.753151 pp |
+| A-A lazy-informed | 15 | 1,606 | 1,606 | 25.778331% | 0.856150 | 37.59% | -11.811669 pp |
+
+解释边界：这里的 A-A 使用原始语音训练的 corrected checkpoint 同时比较匿名 enrollment 与匿名 test，属于 lazy-informed A-A；尚未使用匿名训练集重训攻击者，因此不得当作论文 Table I 的 semi-informed A-A。论文值只作量级对照；本地仅使用 Fisher Part 1 + LibriSpeech `train-clean-360`，并使用自建 split/trials，数值优于论文不代表严格超越作者协议。O-A 从 N=5 到 N=15 下降 1.743462 pp，A-A 从 N=5 到 N=15 下降 13.574097 pp，说明匿名侧 enrollment 聚合在当前 A-A 协议中收益更明显。
+
+匿名 embedding 完整性与表示诊断：
+
+| 检查项 | 结果 |
+|---|---:|
+| shape | 86,222 × 192 |
+| unique IDs | 86,222 |
+| 与原始 embedding ID 集及顺序 | 完全一致 |
+| finite | true |
+| norm mean / min / max | 1.000000 / 1.000000 / 1.000000 |
+| PC1 variance fraction | 9.3640% |
+| top-10 variance fraction | 41.4806% |
+| participation ratio | 34.5691 |
+| seed 1234、10,000 random-pair cosine mean / std | 0.32091 / 0.15287 |
+
+输出文件指纹：
+
+| 文件 | 字节数 | SHA-256 |
+|---|---:|---|
+| `artifacts\embeddings\anonymized_evaluation_corrected.npz` | 61,679,125 | `4cccde8929e403b353d63a500e6b3063f203df0cbcc869919a34b0b23b9be7a0` |
+| `results\o_a_corrected\mean_n1.csv` | 154,703 | `32534e7cac4da2255acc32fdfa26ae144c69852514157eb73acf047671d5191f` |
+| `results\o_a_corrected\mean_n1.metrics.json` | 301 | `c92d6297ec254eee39adb077ff97961db7f2e72cf1996661970df4666083e5af` |
+| `results\o_a_corrected\mean_n5.csv` | 154,299 | `3e5461f8cdde54acb482d40ea37f2baa52737a1a137bdb27e29d08df33815179` |
+| `results\o_a_corrected\mean_n5.metrics.json` | 300 | `e052918fc8a7f86168e8aa8d7a07a28a6845dc36b64de1b4a4c87b5aaa7dc15c` |
+| `results\o_a_corrected\mean_n10.csv` | 154,122 | `bcf72f04c41dc46fb4b49f10bf91381afc12e7a40e0777b19ac66e524d6ed2dd` |
+| `results\o_a_corrected\mean_n10.metrics.json` | 302 | `543d8f6307fca29eca36342dd940248c6bae3a69ba2f9be208bd13ef3b8783da` |
+| `results\o_a_corrected\mean_n15.csv` | 154,082 | `3862ba089fa283b7457551b6fc5bfe8bdc631b12cc1bbd378597407616621490` |
+| `results\o_a_corrected\mean_n15.metrics.json` | 303 | `ea6454b12a22b821d68542d161a37d6f87ecd77a49c627adadbb1b17c57ba52b` |
+| `results\a_a_corrected\mean_n1.csv` | 151,431 | `327d2772d78ea412d62515076faa0988262f222f33dad990447d2b2589d349bc` |
+| `results\a_a_corrected\mean_n1.metrics.json` | 299 | `90f7d0a1df3d441079b7f54cbc25aa93ca55499438744489dee4cbd7163f5436` |
+| `results\a_a_corrected\mean_n5.csv` | 149,627 | `2e090ed934396ae469be6ce6d564bff257f74ba348971db87913c5863c621e6e` |
+| `results\a_a_corrected\mean_n5.metrics.json` | 301 | `f1ad00228075bb32641ef6cdf922796bf2f8ec58725846584cd142e1626ee7ac` |
+| `results\a_a_corrected\mean_n10.csv` | 149,621 | `dba10163fdb4086bf20c651c3906e2188a8109e601f04d8ac80d66feb36d98fb` |
+| `results\a_a_corrected\mean_n10.metrics.json` | 303 | `7fe0c33c1ddff25b14a3a212b1e40f048dced941105fd7e9c504283b8e2f4b41` |
+| `results\a_a_corrected\mean_n15.csv` | 149,576 | `abd9a63554413ae63766abd6f81aa655069b82ca046c26262a3bf531e2d5c446` |
+| `results\a_a_corrected\mean_n15.metrics.json` | 303 | `3294e68ab350cde8aa1a397395c39125aca9249da75645a73f230f715c879556` |
+| `results\runs\anonymization_evaluation\dual_post_scoring_retry.stdout.log` | 3,014 | `9285cdfff62387cc7916977b9c908af3cbd021e8f1aed4e78859a297e57c0c76` |
+| `results\runs\anonymization_evaluation\dual_post_scoring_retry.stderr.log` | 1,927,269 | `fcba6400b94e081ede15712dbb7f2946d92a6015aad1cda35f66c8a8e6783b0b` |
+
+运行代码与输入指纹：
+
+| 文件 | 字节数 | SHA-256 |
+|---|---:|---|
+| `scripts\run_anonymized_scoring_after_generation.ps1` | 2,945 | `3736de23b7b3a2e0d7093298ca925aa542ff8439c36bcf943c39adc79d8ee8f3` |
+| `src\mmsv\cli.py` | 10,662 | `99d8e220b3aabe5e21d77cf880205a96128a0d1269433df3ae183d9031f89556` |
+| `src\mmsv\train.py` | 23,371 | `525b3c531da371bbe061ce88f85e5c3e26ff3357be07d858c7c3a14275d9df8b` |
+| `src\mmsv\metrics.py` | 4,593 | `0c6da0d5ef0f2a2a22e407c6d05e8dfbe715f20240f81fda0db69698468680e0` |
+| `configs\local_fisher_p1_corrected.yaml` | 2,040 | `4e15165f4a35774347a8319353caf1931cc614c960007b8e31a9016299693476` |
+| `artifacts\trials\evaluation.jsonl` | 2,592,387 | `e41c457d31be96a1a2f0fa66af67a553e1007a925ea077153fd4994f5e9646d2` |
+| `artifacts\embeddings\original_evaluation_corrected.npz` | 61,680,027 | `9c8c944a758f92dac45b4225f73317a83113d6a3ad744a5eac2580f2fb314ff3` |
+
+Git 策略：16 个 O-A/A-A score/metrics 小文件与本节实验总账进入 Git；61.7 MB embedding、5.585 GB 匿名音频和逐步日志继续由 `.gitignore` 排除，但绝对路径、大小、完成时间和 SHA-256 已在本节留档。下一阶段是生成 7,272 条 train call-side 匿名语音并进行 corrected semi-informed 训练和相应 O-A/A-A 评估；当前没有后台训练或评分进程。

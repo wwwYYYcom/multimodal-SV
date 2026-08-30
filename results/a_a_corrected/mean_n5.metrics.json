@@ -1,0 +1,10 @@
+{
+  "condition": "A-A",
+  "aggregation": "mean",
+  "n": 5,
+  "trials": 3212,
+  "eer": 0.39352428393524286,
+  "eer_percent": 39.352428393524285,
+  "threshold": 0.7010104656219482,
+  "score_file": "D:\\deeplearning\\ICASSP2027\\multimodal_sv_reproduction\\results\\a_a_corrected\\mean_n5.csv"
+}
