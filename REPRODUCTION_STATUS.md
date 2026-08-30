@@ -34,8 +34,8 @@
 
 ## 进行中
 
-- evaluation StreamVoiceAnon 100 条 GPU 基准已通过；原单进程在保留 303 条正式 FLAC 后暂停。加速 A/B 证明双 FP32 可在 8 GiB GPU 上稳定运行，峰值 6,754 MiB、短基准加速约 1.29 倍；正式任务已于 2026-08-27 16:16:05 +08:00 按 source 总时长切成 44,950/41,272 条两个分片续跑，投影约 98.9 小时。
-- 完整生成结束后将自动校验全部输出、提取匿名 embeddings，并计算 Mean O-A/A-A 的 N=1/5/10/15 EER。
+- evaluation StreamVoiceAnon 已于 2026-08-30 09:47:04 +08:00 完成：86,222 条、5.585 GB，最终校验 valid，missing/unreadable/wrong-format/nonfinite 均为 0，实际双进程 RTF 0.6956。
+- 首次自动 embedding 提取因 Hugging Face SSL 中断失败；已强制离线使用本地 WavLM 缓存并通过 1 条 smoke，正在恢复全量匿名 embeddings 和 Mean O-A/A-A N=1/5/10/15 评分。
 
 ## 未完成
 

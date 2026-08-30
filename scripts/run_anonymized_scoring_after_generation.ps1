@@ -12,9 +12,12 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $projectRoot
 $runDir = 'results/runs/anonymization_evaluation'
 $trialPath = 'artifacts/trials/evaluation.jsonl'
+$env:HF_HUB_OFFLINE = '1'
+$env:TRANSFORMERS_OFFLINE = '1'
 
 Write-Output "scoring_watcher_started=$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')"
 Write-Output "generator_pid=$GeneratorPid"
+Write-Output 'huggingface_offline=true'
 if ($GeneratorPid -gt 0 -and $null -ne (Get-Process -Id $GeneratorPid -ErrorAction SilentlyContinue)) {
     Write-Output 'waiting_for_generation=true'
     Wait-Process -Id $GeneratorPid

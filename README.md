@@ -127,7 +127,7 @@ mmsv score-mean --trials artifacts/trials/evaluation.jsonl --original-embeddings
 
 截至 2026-08-27，corrected Mean O-O 已完成。Fisher Part 1 范围的 N=1/5/10/15 EER 分别为 `15.5044/4.1719/3.1133/2.9265%`；论文报告的 Mean N=5/10/15 为 `3.87/3.29/3.09%`。N=1 是本地扩展，完整产物和差异分析见实验总账第 22 节。
 
-evaluation StreamVoiceAnon 已切换为两个 FP32 进程按 source 总时长平衡续跑。短基准峰值显存 6,754 MiB、相对串行约加速 1.29 倍，86,222 条投影由约 127.7 小时降至约 98.9 小时；监督流程会在生成结束后自动合并并校验 manifest，随后提取匿名 embeddings 和评分 Mean O-A/A-A N=1/5/10/15。
+evaluation StreamVoiceAnon 的 86,222 条匿名化已完成并通过最终校验，实际双进程 RTF 为 0.6956、输出约 5.585 GB。后处理强制离线使用本机 WavLM 缓存，随后提取匿名 embeddings 并评分 Mean O-A/A-A N=1/5/10/15。
 
 ## Git 版本管理
 

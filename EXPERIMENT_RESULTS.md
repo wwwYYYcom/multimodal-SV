@@ -1056,3 +1056,30 @@ embedding 完整性与非塌缩诊断：
 | `scripts\merge_anonymization_manifests.py` | 2,949 | `9a51a10235d55506fec5483c6528d846638d394eb2d1b2cfff6da168a4754b70` |
 | `tests\test_anonymization.py` | 4,727 | `0011b3cdf63eca7673f4599e115f3defce7ba7987752206e58139fa885535466` |
 | `tests\test_anonymization_validation.py` | 2,994 | `5eb24d5996031fb0f14156a3f075ea215e8982484e7aa30c71023a51d895886a` |
+
+## 25. E26：完整 evaluation 匿名化完成与离线后处理恢复
+
+- 状态：86,222 条匿名化已完成并通过最终校验；首次自动 embedding 提取因 Hugging Face SSL 中断而失败，本地离线 smoke 已通过，准备重启全量后处理。
+- 双进程正式启动：2026-08-27 16:16:05 +08:00。
+- 最后一条 FLAC 完成：2026-08-30 09:45:16 +08:00。
+- manifest 合并与最终校验完成：2026-08-30 09:47:04 +08:00。
+- 墙钟时间：235,757.3949926 秒，即 65.4882 小时；实际 RTF `0.6956108691`。
+- GPU 峰值显存：7,731 MiB / 8,151 MiB；双进程运行期间无 OOM。
+- 输出：86,222 条 16 kHz mono FLAC，共 5,585,060,420 字节；source/output 总时长 338,921.3790 / 336,916.3377 秒。
+- 完整性：plan 86,222 行、manifest 86,222 行、unique IDs 86,222、顺序匹配；missing/unreadable/wrong-format/nonfinite 均为 0。
+- 时长相对误差：P50 `0.6874%`、P95 `2.9571%`、最大 `4.3873%`；抽查 100 条 finite。
+- 正式音频目录：`D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\artifacts\anonymized\evaluation`。
+- 首次后处理失败：2026-08-30 09:47 +08:00，`snapshot_download` 访问 `huggingface.co` 时发生 `SSL: UNEXPECTED_EOF_WHILE_READING`；失败发生在 embedding 输出创建前，匿名音频、manifest 和最终校验均不受影响。
+- 修复：`scripts\run_anonymized_scoring_after_generation.ps1` 在启动 Python 前固定 `HF_HUB_OFFLINE=1`、`TRANSFORMERS_OFFLINE=1`，强制使用本机完整缓存 `models--microsoft--wavlm-large`。
+- 离线 smoke：2026-08-30 10:49:03 +08:00 完成；从正式匿名 manifest 提取 1 条 embedding，模型加载成功，单条推理约 1.95 秒。
+- 后续输出：`artifacts\embeddings\anonymized_evaluation_corrected.npz`，以及 `results\o_a_corrected`、`results\a_a_corrected` 下 N=1/5/10/15 Mean score 与 metrics。
+
+完成产物与恢复代码指纹：
+
+| 文件 | 字节数 | SHA-256 |
+|---|---:|---|
+| `results\runs\anonymization_evaluation\final.validation.json` | 992 | `d760c00a6432337ae961dd5f2aaccf30d686e16a6f6c0be61adc25d339207946` |
+| `artifacts\metadata\fisher_anonymized_evaluation_manifest.csv` | 20,623,558 | `30f2b8450b98f5ee571239fb599eaf0c1e0edafd8540a46aac58b79d44c45eea` |
+| `artifacts\metadata\fisher_anonymized_evaluation_manifest.audit.json` | 2,412 | `d5ed9527fe41de233579f7a577c553fc11b528a39f5e86a6b7bcc60b1e2df9c6` |
+| `results\runs\anonymization_evaluation\offline_embedding_smoke.npz` | 1,203 | `2f3d2a8cc756b37b4980333a3725917b171e55efe64f0ca30547c51e267cfb11` |
+| `scripts\run_anonymized_scoring_after_generation.ps1` | 2,945 | `3736de23b7b3a2e0d7093298ca925aa542ff8439c36bcf943c39adc79d8ee8f3` |
