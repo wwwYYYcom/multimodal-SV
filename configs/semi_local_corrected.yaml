@@ -1,0 +1,35 @@
+seed: 1234
+sample_rate: 16000
+crop_seconds: 4.0
+
+model:
+  wavlm_name: microsoft/wavlm-large
+  hf_endpoint: https://huggingface.co
+  wavlm_frozen: true
+  embedding_dim: 192
+  query_heads: 4
+  query_temperature: 0.3
+
+train:
+  # Semi-informed attacker: initialize from corrected lazy weights, but reset optimizer.
+  # The anonymized manifest has one deterministic source per Fisher train call-side.
+  batch_size: 64
+  gradient_accumulation: 1
+  sampling_mode: all_utterances
+  shuffle_utterances: true
+  short_utterance_mode: repeat
+  feature_microbatch_size: 32
+  amp: true
+  num_workers: 1
+  prefetch_factor: 2
+  pin_memory: true
+  checkpoint_interval_steps: 10
+  save_epoch_checkpoints: true
+  epochs: 15
+  learning_rate: 1.0e-4
+  weight_decay: 1.0e-4
+  gradient_clip: 1.0
+  aam_margin: 0.2
+  aam_scale: 30.0
+  scheduler_step: 5
+  scheduler_gamma: 0.5
