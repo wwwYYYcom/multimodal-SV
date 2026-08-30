@@ -39,7 +39,7 @@
 - O-A N=1/5/10/15 EER：`43.5243/38.4184/36.7995/36.6750%`。
 - lazy-informed A-A N=1/5/10/15 EER：`47.3848/39.3524/31.5068/25.7783%`。
 - 结果目录为 `results/o_a_corrected`、`results/a_a_corrected`；完整指标、文件路径、日志与 SHA-256 见 `EXPERIMENT_RESULTS.md` 第 26 节。
-- 当前无后台计算进程，GPU 空闲。
+- 全 utterance train 匿名化已于 2026-08-30 15:34:03 +08:00 启动：supervisor PID `48012`，worker PID `86028/98496`；GPU 稳态约 75%、5.1 GiB，预计匿名化约 17.4 天，完成后自动进入 15 epoch semi-informed 训练和 O-A/A-A 评分。
 
 ## 未完成
 

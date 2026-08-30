@@ -1189,7 +1189,7 @@ Git 策略：16 个 O-A/A-A score/metrics 小文件与本节实验总账进入 G
 
 ### E28b：全 utterance 计划与可恢复流水线准备
 
-- 状态：计划完成、代码与测试完成，等待正式启动。
+- 状态：正式全量双进程匿名化运行中；完成后自动进入 15 epoch semi-informed 训练与 O-A/A-A 评分。
 - 全量计划完成时间：2026-08-30 15:14:00 +08:00。
 - 计划：572,951 行、572,951 unique IDs、572,951 unique output paths、5,231 speakers；`one_per_call_side=false`。
 - reference：只来自现有 `train-clean-360` 大于 4 秒池；seed 1234 下选中 98,958 条 unique references；每个 utterance 使用稳定的独立随机映射。
@@ -1225,3 +1225,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/anonymize_train_dual
 | `tests\test_anonymization.py` | 6,813 | `9957f6e1f5e22e312e0a9358cb3eaac61a560af325d4517591c7342c0056d4f9` |
 
 为支持 572,951 条规模，runner 已改为用 `itertools.islice` 流式读取计划、逐行写入临时 manifest 并原子替换，progress 文件保持行缓冲；manifest 合并使用磁盘 SQLite 索引恢复 plan 顺序；最终验证改为流式 plan/manifest 对齐。这样避免两个 worker 各自同时持有 355 MB 计划及数十万字典对象。PowerShell AST、Python compileall、流式 slice/原子 manifest 回归测试、乱序 worker manifest 合并测试及全部测试均通过（`22 passed`）。
+
+正式启动记录：
+
+- 修正代码提交：`939cc03bbceda0d281cf49ec1249ba50bc91f470`（`fix: use full utterances for semi-informed training`）。
+- 启动时间：2026-08-30 15:34:03 +08:00。
+- supervisor PID：`48012`；worker 1 PID：`86028`；worker 2 PID：`98496`。
+- 正式运行目录：`results\runs\anonymization_train\dual_20260830_153403_742`。
+- supervisor 日志：`results\runs\anonymization_train\full_supervisor.stdout.log`、`full_supervisor.stderr.log`。
+- worker 日志：正式运行目录下的 `worker1.stdout.log`、`worker1.stderr.log`、`worker2.stdout.log`、`worker2.stderr.log`；progress 使用对应 `worker*.manifest.progress.jsonl`。
+- 启动空间：46,590,685,184 字节；复用输出：2,262,285 字节；预计最终匿名音频 35,828,004,345 字节。
+- 稳定性快照：2026-08-30 15:38:08 +08:00，worker 1/2 progress 为 79/301,378 与 42/271,573，GPU 显存 5,028 MiB；随后 15:39:04 输出目录共 197 条、9,463,283 字节。GPU 利用率约 75%、显存约 5,074/8,151 MiB、61°C、39.22 W；supervisor 与 worker stderr 均为空，无 OOM。
+- 主存快照：两个 StreamVoiceAnon worker working set 分别约 3.50 GB 与 3.40 GB；计划/manifest 已流式化，该内存主要为两个模型实例，不会随 572,951 行线性累积。
+- 匿名化预计约 17.4 天；按启动时间粗略推算约 2026-09-17 前后完成，实际完成时间以逐条源时长和机器连续运行情况为准。随后全量训练和两套 embedding/评分预计另需约 3 天。
