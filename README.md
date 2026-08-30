@@ -127,7 +127,7 @@ mmsv score-mean --trials artifacts/trials/evaluation.jsonl --original-embeddings
 
 截至 2026-08-27，corrected Mean O-O 已完成。Fisher Part 1 范围的 N=1/5/10/15 EER 分别为 `15.5044/4.1719/3.1133/2.9265%`；论文报告的 Mean N=5/10/15 为 `3.87/3.29/3.09%`。N=1 是本地扩展，完整产物和差异分析见实验总账第 22 节。
 
-evaluation StreamVoiceAnon 的 86,222 条匿名化已完成并通过最终校验，实际双进程 RTF 为 0.6956、输出约 5.585 GB。匿名 embeddings 与 Mean O-A/A-A N=1/5/10/15 已于 2026-08-30 11:54:11 +08:00 全部完成：O-A EER 为 `43.5243/38.4184/36.7995/36.6750%`，lazy-informed A-A EER 为 `47.3848/39.3524/31.5068/25.7783%`。输出位于 `results/o_a_corrected` 与 `results/a_a_corrected`，完整审计记录见 `EXPERIMENT_RESULTS.md` 第 26 节。下一阶段为 train call-side 匿名化及 semi-informed 训练。
+evaluation StreamVoiceAnon 的 86,222 条匿名化已完成并通过最终校验，实际双进程 RTF 为 0.6956、输出约 5.585 GB。匿名 embeddings 与 Mean O-A/A-A N=1/5/10/15 已于 2026-08-30 11:54:11 +08:00 全部完成：O-A EER 为 `43.5243/38.4184/36.7995/36.6750%`，lazy-informed A-A EER 为 `47.3848/39.3524/31.5068/25.7783%`。输出位于 `results/o_a_corrected` 与 `results/a_a_corrected`，完整审计记录见 `EXPERIMENT_RESULTS.md` 第 26 节。semi-informed 阶段采用 Fisher Part 1 train split 的全部 572,951 utterances，而不是 7,272 条 one-per-call-side 近似；全量计划和中止记录见总账第 27 节。
 
 ## Git 版本管理
 

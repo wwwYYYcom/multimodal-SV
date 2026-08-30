@@ -2,7 +2,10 @@ import csv
 import json
 from pathlib import Path
 
-from mmsv.anonymization import build_anonymization_plan
+import numpy as np
+
+import mmsv.anonymization as anonymization
+from mmsv.anonymization import anonymize_plan, build_anonymization_plan
 from mmsv.cli import build_parser
 
 
@@ -116,3 +119,56 @@ def test_anonymization_cli_accepts_compile_and_slice_flags() -> None:
     assert args.compile_encoder is True
     assert args.compile_decoder is True
     assert args.fp16 is True
+
+
+def test_anonymize_plan_streams_requested_slice_and_writes_atomic_manifest(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    class FakeWrapper:
+        device = "cpu"
+        sr = 16000
+
+        @staticmethod
+        def infer(*args, **kwargs):
+            return np.full(320, 0.1, dtype=np.float32)
+
+    monkeypatch.setattr(anonymization, "_load_streamvoice_wrapper", lambda *args, **kwargs: FakeWrapper())
+    monkeypatch.setattr(
+        anonymization,
+        "read_segment",
+        lambda *args, **kwargs: np.full(320, 0.1, dtype=np.float32),
+    )
+    plan = tmp_path / "plan.csv"
+    fieldnames = [
+        "utt_id", "speaker_id", "call_id", "channel", "audio_path",
+        "start", "end", "duration", "transcript", "reference_utt_id",
+        "reference_speaker_id", "reference_audio_path", "reference_duration",
+        "output_audio_path",
+    ]
+    with plan.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for index in range(3):
+            writer.writerow({
+                "utt_id": f"u{index}", "speaker_id": "s", "call_id": "c",
+                "channel": "0", "audio_path": "source.wav", "start": "0",
+                "end": "0.02", "duration": "0.02", "transcript": "hello",
+                "reference_utt_id": "r", "reference_speaker_id": "rs",
+                "reference_audio_path": "reference.wav", "reference_duration": "5",
+                "output_audio_path": str(tmp_path / f"u{index}.flac"),
+            })
+    manifest = tmp_path / "manifest.csv"
+    result = anonymize_plan(
+        plan,
+        manifest,
+        tmp_path,
+        start_index=1,
+        limit=1,
+    )
+    with manifest.open("r", encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert result["processed"] == 1
+    assert result["start_index"] == 1
+    assert [row["utt_id"] for row in rows] == ["u1"]
+    assert not manifest.with_suffix(".csv.tmp").exists()

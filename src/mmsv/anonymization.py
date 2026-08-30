@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import itertools
 import json
 import os
 import random
@@ -207,6 +208,8 @@ def anonymize_plan(
     import soundfile as sf
     from scipy.signal import resample_poly
 
+    if start_index < 0:
+        raise ValueError("start_index must be non-negative")
     root = Path(streamvoice_root).resolve()
     config = Path(config_path)
     checkpoint = Path(checkpoint_path)
@@ -224,76 +227,79 @@ def anonymize_plan(
         fp16=fp16,
     )
 
-    with Path(plan_csv).open("r", encoding="utf-8", newline="") as handle:
-        rows = list(csv.DictReader(handle))
-    if start_index < 0:
-        raise ValueError("start_index must be non-negative")
-    rows = rows[start_index:]
-    if limit is not None:
-        rows = rows[:limit]
-    if not rows:
-        raise ValueError("匿名化计划为空")
-
     manifest_path = Path(output_manifest)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     progress_path = manifest_path.with_suffix(".progress.jsonl")
-    completed_rows: list[dict[str, str]] = []
+    temporary_manifest = manifest_path.with_suffix(manifest_path.suffix + ".tmp")
+    fieldnames = [
+        "utt_id", "speaker_id", "call_id", "channel", "audio_path",
+        "start", "end", "duration", "transcript",
+    ]
+    stop_index = None if limit is None else start_index + max(0, limit)
+    processed = 0
     generated = 0
     skipped = 0
-    for index, row in enumerate(rows, start=start_index + 1):
-        item_started = time.perf_counter()
-        destination = Path(row["output_audio_path"])
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        if destination.exists() and destination.stat().st_size > 0:
-            skipped += 1
-        else:
-            source_row = {
-                name: row[name]
-                for name in [
-                    "utt_id", "speaker_id", "call_id", "channel", "audio_path",
-                    "start", "end", "duration", "transcript",
-                ]
-            }
-            waveform = read_segment(source_row, sample_rate, sph2pipe)
-            with tempfile.TemporaryDirectory(prefix="mmsv_streamvoice_") as temporary:
-                temp_root = Path(temporary)
-                source_wav = temp_root / "source.wav"
-                sf.write(source_wav, np.asarray(waveform, dtype=np.float32), sample_rate)
-                with _working_directory(root):
-                    generated_audio = wrapper.infer(
-                        str(source_wav),
-                        row["reference_audio_path"],
-                        delay=delay,
-                        alpha=alpha,
-                        save_result=False,
-                    )
-                audio = np.asarray(generated_audio, dtype=np.float32)
-                generated_rate = int(wrapper.sr)
-                if generated_rate != sample_rate:
-                    divisor = int(np.gcd(generated_rate, sample_rate))
-                    audio = resample_poly(
-                        audio,
-                        sample_rate // divisor,
-                        generated_rate // divisor,
-                    ).astype(np.float32)
-                temporary_output = destination.with_suffix(destination.suffix + ".tmp")
-                sf.write(temporary_output, audio, sample_rate, format="FLAC")
-                temporary_output.replace(destination)
-            generated += 1
+    with (
+        Path(plan_csv).open("r", encoding="utf-8", newline="") as plan_handle,
+        temporary_manifest.open("w", encoding="utf-8", newline="") as manifest_handle,
+        progress_path.open("a", encoding="utf-8", buffering=1) as progress,
+    ):
+        rows = itertools.islice(csv.DictReader(plan_handle), start_index, stop_index)
+        writer = csv.DictWriter(manifest_handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for index, row in enumerate(rows, start=start_index + 1):
+            item_started = time.perf_counter()
+            destination = Path(row["output_audio_path"])
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            if destination.exists() and destination.stat().st_size > 0:
+                skipped += 1
+            else:
+                source_row = {
+                    name: row[name]
+                    for name in [
+                        "utt_id", "speaker_id", "call_id", "channel", "audio_path",
+                        "start", "end", "duration", "transcript",
+                    ]
+                }
+                waveform = read_segment(source_row, sample_rate, sph2pipe)
+                with tempfile.TemporaryDirectory(prefix="mmsv_streamvoice_") as temporary:
+                    temp_root = Path(temporary)
+                    source_wav = temp_root / "source.wav"
+                    sf.write(source_wav, np.asarray(waveform, dtype=np.float32), sample_rate)
+                    with _working_directory(root):
+                        generated_audio = wrapper.infer(
+                            str(source_wav),
+                            row["reference_audio_path"],
+                            delay=delay,
+                            alpha=alpha,
+                            save_result=False,
+                        )
+                    audio = np.asarray(generated_audio, dtype=np.float32)
+                    generated_rate = int(wrapper.sr)
+                    if generated_rate != sample_rate:
+                        divisor = int(np.gcd(generated_rate, sample_rate))
+                        audio = resample_poly(
+                            audio,
+                            sample_rate // divisor,
+                            generated_rate // divisor,
+                        ).astype(np.float32)
+                    temporary_output = destination.with_suffix(destination.suffix + ".tmp")
+                    sf.write(temporary_output, audio, sample_rate, format="FLAC")
+                    temporary_output.replace(destination)
+                generated += 1
 
-        info = sf.info(destination)
-        completed_rows.append({
-            "utt_id": row["utt_id"],
-            "speaker_id": row["speaker_id"],
-            "call_id": row["call_id"],
-            "channel": "0",
-            "audio_path": str(destination.resolve()),
-            "start": "0",
-            "end": f"{info.duration:.8f}",
-            "duration": f"{info.duration:.8f}",
-            "transcript": row["transcript"],
-        })
-        with progress_path.open("a", encoding="utf-8") as progress:
+            info = sf.info(destination)
+            writer.writerow({
+                "utt_id": row["utt_id"],
+                "speaker_id": row["speaker_id"],
+                "call_id": row["call_id"],
+                "channel": "0",
+                "audio_path": str(destination.resolve()),
+                "start": "0",
+                "end": f"{info.duration:.8f}",
+                "duration": f"{info.duration:.8f}",
+                "transcript": row["transcript"],
+            })
             progress.write(json.dumps({
                 "index": index,
                 "utt_id": row["utt_id"],
@@ -301,20 +307,17 @@ def anonymize_plan(
                 "seconds": info.duration,
                 "elapsed_seconds": time.perf_counter() - item_started,
             }, ensure_ascii=False) + "\n")
-
-    with manifest_path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=[
-            "utt_id", "speaker_id", "call_id", "channel", "audio_path",
-            "start", "end", "duration", "transcript",
-        ])
-        writer.writeheader()
-        writer.writerows(completed_rows)
+            processed += 1
+    if processed == 0:
+        temporary_manifest.unlink(missing_ok=True)
+        raise ValueError("匿名化计划为空")
+    temporary_manifest.replace(manifest_path)
     result = {
         "plan": str(Path(plan_csv).resolve()),
         "manifest": str(manifest_path.resolve()),
         "progress": str(progress_path.resolve()),
         "device": str(wrapper.device),
-        "processed": len(completed_rows),
+        "processed": processed,
         "generated": generated,
         "skipped_existing": skipped,
         "sample_rate": sample_rate,

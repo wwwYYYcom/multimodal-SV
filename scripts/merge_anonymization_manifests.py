@@ -3,6 +3,9 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import sqlite3
+import tempfile
+from contextlib import closing
 from pathlib import Path
 
 
@@ -13,28 +16,7 @@ def main() -> None:
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
 
-    with args.plan.open("r", encoding="utf-8", newline="") as handle:
-        plan_rows = list(csv.DictReader(handle))
-    rows_for_id: dict[str, dict[str, str]] = {}
     worker_audits: list[dict[str, object]] = []
-    for manifest in args.manifests:
-        with manifest.open("r", encoding="utf-8", newline="") as handle:
-            for row in csv.DictReader(handle):
-                utterance_id = row["utt_id"]
-                if utterance_id in rows_for_id:
-                    raise ValueError(f"duplicate utterance across workers: {utterance_id}")
-                rows_for_id[utterance_id] = row
-        audit_path = manifest.with_suffix(".audit.json")
-        worker_audits.append(json.loads(audit_path.read_text(encoding="utf-8")))
-
-    plan_ids = [row["utt_id"] for row in plan_rows]
-    missing = [utterance_id for utterance_id in plan_ids if utterance_id not in rows_for_id]
-    extras = sorted(set(rows_for_id) - set(plan_ids))
-    if missing or extras:
-        raise ValueError(
-            f"worker manifests do not match plan: missing={missing[:10]}, extras={extras[:10]}"
-        )
-
     fieldnames = [
         "utt_id",
         "speaker_id",
@@ -48,10 +30,54 @@ def main() -> None:
     ]
     args.output.parent.mkdir(parents=True, exist_ok=True)
     temporary = args.output.with_suffix(args.output.suffix + ".tmp")
-    with temporary.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows_for_id[utterance_id] for utterance_id in plan_ids)
+    processed = 0
+    with tempfile.TemporaryDirectory(
+        prefix="mmsv_manifest_merge_", dir=args.output.parent
+    ) as temporary_dir:
+        database_path = Path(temporary_dir) / "rows.sqlite3"
+        with closing(sqlite3.connect(database_path)) as connection:
+            connection.execute(
+                "CREATE TABLE rows (utt_id TEXT PRIMARY KEY, payload TEXT NOT NULL) WITHOUT ROWID"
+            )
+            try:
+                for manifest in args.manifests:
+                    with manifest.open("r", encoding="utf-8", newline="") as handle:
+                        connection.executemany(
+                            "INSERT INTO rows VALUES (?, ?)",
+                            (
+                                (row["utt_id"], json.dumps(row, ensure_ascii=False))
+                                for row in csv.DictReader(handle)
+                            ),
+                        )
+                    audit_path = manifest.with_suffix(".audit.json")
+                    worker_audits.append(json.loads(audit_path.read_text(encoding="utf-8")))
+            except sqlite3.IntegrityError as error:
+                raise ValueError(f"duplicate utterance across workers: {error}") from error
+            worker_row_count = int(connection.execute("SELECT COUNT(*) FROM rows").fetchone()[0])
+            missing: list[str] = []
+            with (
+                args.plan.open("r", encoding="utf-8", newline="") as plan_handle,
+                temporary.open("w", encoding="utf-8", newline="") as output_handle,
+            ):
+                writer = csv.DictWriter(output_handle, fieldnames=fieldnames)
+                writer.writeheader()
+                for plan_row in csv.DictReader(plan_handle):
+                    utterance_id = plan_row["utt_id"]
+                    match = connection.execute(
+                        "SELECT payload FROM rows WHERE utt_id = ?", (utterance_id,)
+                    ).fetchone()
+                    if match is None:
+                        if len(missing) < 10:
+                            missing.append(utterance_id)
+                        continue
+                    writer.writerow(json.loads(match[0]))
+                    processed += 1
+            extras = worker_row_count - processed
+            if missing or extras:
+                temporary.unlink(missing_ok=True)
+                raise ValueError(
+                    f"worker manifests do not match plan: missing={missing}, extra_count={extras}"
+                )
     temporary.replace(args.output)
 
     audit = {
@@ -59,7 +85,7 @@ def main() -> None:
         "manifest": str(args.output.resolve()),
         "worker_manifests": [str(path.resolve()) for path in args.manifests],
         "device": "cuda:dual-process",
-        "processed": len(plan_rows),
+        "processed": processed,
         "generated": sum(int(item["generated"]) for item in worker_audits),
         "skipped_existing": sum(int(item["skipped_existing"]) for item in worker_audits),
         "sample_rate": 16000,

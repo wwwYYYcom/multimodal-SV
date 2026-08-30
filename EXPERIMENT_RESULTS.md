@@ -1164,4 +1164,64 @@ embedding 完整性与非塌缩诊断：
 | `artifacts\trials\evaluation.jsonl` | 2,592,387 | `e41c457d31be96a1a2f0fa66af67a553e1007a925ea077153fd4994f5e9646d2` |
 | `artifacts\embeddings\original_evaluation_corrected.npz` | 61,680,027 | `9c8c944a758f92dac45b4225f73317a83113d6a3ad744a5eac2580f2fb314ff3` |
 
-Git 策略：16 个 O-A/A-A score/metrics 小文件与本节实验总账进入 Git；61.7 MB embedding、5.585 GB 匿名音频和逐步日志继续由 `.gitignore` 排除，但绝对路径、大小、完成时间和 SHA-256 已在本节留档。下一阶段是生成 7,272 条 train call-side 匿名语音并进行 corrected semi-informed 训练和相应 O-A/A-A 评估；当前没有后台训练或评分进程。
+Git 策略：16 个 O-A/A-A score/metrics 小文件与本节实验总账进入 Git；61.7 MB embedding、5.585 GB 匿名音频和逐步日志继续由 `.gitignore` 排除，但绝对路径、大小、完成时间和 SHA-256 已在本节留档。本节当时拟采用 7,272 条 train call-side 近似；该决定随后被判定不符合论文全 utterance 协议并在第 27 节中止、修正。
+
+## 27. E28：中止 one-per-call-side 近似并改为全 utterance semi-informed 协议
+
+### E28a：7,272 条缩减流水线（已中止，不用于结果）
+
+- 状态：中止。用户指出该方案不等价于论文的 utterance-level semi-informed 协议后立即停止。
+- 启动时间：2026-08-30 15:07:57 +08:00。
+- 停止时间：2026-08-30 15:10 +08:00。
+- supervisor PID：`26752`；worker PID：`99696`、`97468`；三者均已终止。
+- 错误输入计划：`artifacts\anonymization\train_one_per_call_side_plan.csv`，7,272 条、7.6451 小时、5,231 speakers。
+- 停止时保留 46 条 FLAC，共 2,262,285 字节；路径仍位于 `artifacts\anonymized\train`。这些 utterance 及 seed 1234 reference 映射均属于后续全量计划，因此正式任务可校验后跳过复用；它们未进入训练。
+- 中止日志：`results\runs\anonymization_train\supervisor.stdout.log`、`supervisor.stderr.log`，以及 `results\runs\anonymization_train\dual_20260830_150757_810` 下两个 worker 的日志和 progress。
+- 启动前代码提交：`5ead896`。该提交保留在 Git 历史中作为决策记录，后续提交将协议改为全 utterance，不改写历史。
+
+### 论文原文核验与本地协议映射
+
+- 核验来源：`C:\Users\wwwYYYcom\Zotero\storage\DH7AVWNV\Garg 等 - 2026 - Multimodal Speaker Verification as a Threat to Speaker Anonymization.pdf`，完整阅读相关第 4–6 页并渲染核对版面。
+- 第 IV-A 节：作者按 speaker 划分为 5,712/250/1,753 train/validation/evaluation；每条待匿名 utterance 独立从 LibriSpeech `train-clean-360` 与 `train-other-500` 的大于 4 秒语音中随机选择 target，固定 delay=2、alpha=1。
+- 第 IV-C(c) 节：明确写明 Fisher training split 在 utterance level 匿名化；semi-informed 模型从对应 lazy-informed 模型初始化，继续优化 ECAPA backend 与 aggregation module，学习率 `1e-4`，训练 15 epochs。
+- 本地受用户数据范围约束：只使用 Fisher Part 1 和 LibriSpeech `train-clean-360`，因此本地 split 为 5,231/229/1,606 speakers，reference pool 为 clean-360 的 99,278 条大于 4 秒语音。正式名称为“Fisher Part 1 + LibriSpeech train-clean-360 semi-informed reproduction”，不是作者完整数据范围的精确复刻。
+- 正式本地训练语音：Fisher Part 1 train split 的全部 572,951 utterances，而不是每个 call-side 只取一条；总时长 2,161,308.76 秒，即 600.3635 小时。
+
+### E28b：全 utterance 计划与可恢复流水线准备
+
+- 状态：计划完成、代码与测试完成，等待正式启动。
+- 全量计划完成时间：2026-08-30 15:14:00 +08:00。
+- 计划：572,951 行、572,951 unique IDs、572,951 unique output paths、5,231 speakers；`one_per_call_side=false`。
+- reference：只来自现有 `train-clean-360` 大于 4 秒池；seed 1234 下选中 98,958 条 unique references；每个 utterance 使用稳定的独立随机映射。
+- 双进程按 source 总时长平衡：split index `301,378`；worker 1/2 分别为 1,080,657.03 / 1,080,651.73 秒。
+- 46 条中止产物全部存在于全量计划，且在缩减/全量计划中的 reference ID 完全一致，可安全断点复用。
+- 实测投影：按 evaluation 输出压缩率，预计约 35,828,004,345 字节（33.37 GiB）；按双进程 RTF 0.6956108691，匿名化墙钟约 417.62 小时（17.40 天）。
+- 启动前 D 盘：46,590,763,008 字节（43.39 GiB）可用；流水线内置“剩余预计输出 + 6 GiB”空间保护，预留 checkpoint、embedding、合并临时库和日志空间。
+- 训练：从 `results\runs\audio_corrected_p1\last.pt` 使用 `--init-from` 初始化并重置 optimizer；WavLM 冻结，ECAPA 继续训练；physical batch 64、feature micro-batch 32、AMP、短语音 repeat、学习率 `1e-4`、15 epochs；每 epoch 8,952 full batches，共 134,280 optimizer steps。
+- 训练完成后自动提取 semi-informed 模型下的 original/anonymized evaluation embeddings，并计算 Mean O-A/A-A N=1/5/10/15；论文 Table I 的 Mean semi-informed A-A N=5/10/15 参考值为 `18.68/14.70/13.70%`。
+- 全量计划、音频、manifest、embedding、checkpoint 和逐步日志由 `.gitignore` 排除；代码、配置、测试和本节总账进入 Git。
+
+正式运行入口：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/anonymize_train_dual_then_train_semi.ps1
+```
+
+关键输入与代码指纹：
+
+| 文件 | 字节数 | SHA-256 |
+|---|---:|---|
+| `artifacts\anonymization\train_all_utterances_plan.csv` | 355,706,506 | `34d6d893efceab4508591965c73c31927d401afdaf503a4a9c04552b45d7cb28` |
+| `artifacts\anonymization\train_all_utterances_plan.audit.json` | 913 | `60ab5ea0d5c521e900e7be6c9cfa302ea206b462c3c065f849a17beb78634641` |
+| `artifacts\metadata\librispeech_target_pool.csv` | 20,264,920 | `ff04bd9e77d7702560e75147a44fd2e313f1957cf2e65b78927463062f19bea2` |
+| `artifacts\metadata\fisher_manifest.csv` | 300,904,760 | `e9172730119921a6358d7e47125c8d6e0a77950ef6edb4f90eac0e6ca2574d12` |
+| `artifacts\metadata\speaker_splits.csv` | 137,401 | `9dd0c24d47aeb94ca453b35a76d755976d504f86fde0abdcaf284919fb34f0fc` |
+| `results\runs\audio_corrected_p1\last.pt` | 115,738,499 | `0c69749dbb51929054e3e57990b04d2e737cefd96902f1d0100e80b402313508` |
+| `configs\semi_local_corrected.yaml` | 860 | `7af7c1c0a1678830e1dc5e04ddba2dd958f6f17ce864faad74ab1295b806f413` |
+| `scripts\anonymize_train_dual_then_train_semi.ps1` | 10,424 | `1cd3d07e127997e3569eaaca5dfc1ea200ec60d604d1643bee30de4b61ffc451` |
+| `src\mmsv\anonymization.py` | 13,632 | `5a95256954c50ff704390a0455011267b5df1cefac14a4f15ff9f919f381811a` |
+| `scripts\merge_anonymization_manifests.py` | 4,212 | `0ff17a0ac1b2ce4d02c1e975b3c54e1cedee0f3ab80d0fc3a41b644da0ebe949` |
+| `scripts\validate_anonymization_outputs.py` | 6,491 | `066840aacdb9c4fb71d07e89149c111f965b5898523f915a2cb5e7fa9553fe3d` |
+| `tests\test_anonymization.py` | 6,813 | `9957f6e1f5e22e312e0a9358cb3eaac61a560af325d4517591c7342c0056d4f9` |
+
+为支持 572,951 条规模，runner 已改为用 `itertools.islice` 流式读取计划、逐行写入临时 manifest 并原子替换，progress 文件保持行缓冲；manifest 合并使用磁盘 SQLite 索引恢复 plan 顺序；最终验证改为流式 plan/manifest 对齐。这样避免两个 worker 各自同时持有 355 MB 计划及数十万字典对象。PowerShell AST、Python compileall、流式 slice/原子 manifest 回归测试、乱序 worker manifest 合并测试及全部测试均通过（`22 passed`）。

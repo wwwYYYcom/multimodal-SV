@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import itertools
 import json
 from pathlib import Path
 
@@ -24,12 +25,9 @@ def validate_outputs(
     wall_seconds: float | None = None,
     full_plan_source_hours: float | None = None,
 ) -> dict[str, object]:
-    with plan_path.open("r", encoding="utf-8", newline="") as handle:
-        plan_rows = list(csv.DictReader(handle))[:expected]
-    with manifest_path.open("r", encoding="utf-8", newline="") as handle:
-        manifest_rows = list(csv.DictReader(handle))
-
-    manifest_for = {row["utt_id"]: row for row in manifest_rows}
+    plan_rows_count = 0
+    manifest_rows_count = 0
+    manifest_ids: set[str] = set()
     missing: list[str] = []
     unreadable: list[str] = []
     wrong_format: list[str] = []
@@ -39,43 +37,57 @@ def validate_outputs(
     source_seconds = 0.0
     output_seconds = 0.0
 
-    for index, row in enumerate(plan_rows):
-        utterance_id = row["utt_id"]
-        source_duration = float(row["duration"])
-        source_seconds += source_duration
-        destination = Path(row["output_audio_path"])
-        manifest_row = manifest_for.get(utterance_id)
-        if manifest_row is None or not destination.is_file() or destination.stat().st_size <= 0:
-            if len(missing) < 10:
-                missing.append(utterance_id)
-            continue
-        try:
-            info = sf.info(destination)
-            output_bytes += destination.stat().st_size
-            output_seconds += float(info.duration)
-            if info.samplerate != sample_rate or info.channels != 1 or info.frames <= 0:
-                if len(wrong_format) < 10:
-                    wrong_format.append(utterance_id)
-            if source_duration > 0:
-                duration_relative_errors.append(
-                    abs(float(info.duration) - source_duration) / source_duration
-                )
-            if index < finite_check_limit:
-                audio, read_rate = sf.read(destination, dtype="float32", always_2d=False)
-                if read_rate != sample_rate or not np.isfinite(audio).all() or audio.size == 0:
-                    if len(nonfinite) < 10:
-                        nonfinite.append(utterance_id)
-        except Exception as error:  # pragma: no cover - depends on decoder failure mode
-            if len(unreadable) < 10:
-                unreadable.append(f"{utterance_id}: {error}")
+    id_order_matches = True
+    with (
+        plan_path.open("r", encoding="utf-8", newline="") as plan_handle,
+        manifest_path.open("r", encoding="utf-8", newline="") as manifest_handle,
+    ):
+        plan_rows = itertools.islice(csv.DictReader(plan_handle), expected)
+        manifest_rows = csv.DictReader(manifest_handle)
+        for index, (row, manifest_row) in enumerate(
+            itertools.zip_longest(plan_rows, manifest_rows)
+        ):
+            if row is not None:
+                plan_rows_count += 1
+            if manifest_row is not None:
+                manifest_rows_count += 1
+                manifest_ids.add(manifest_row["utt_id"])
+            if row is None or manifest_row is None or row["utt_id"] != manifest_row["utt_id"]:
+                id_order_matches = False
+            if row is None:
+                continue
+            utterance_id = row["utt_id"]
+            source_duration = float(row["duration"])
+            source_seconds += source_duration
+            destination = Path(row["output_audio_path"])
+            if manifest_row is None or not destination.is_file() or destination.stat().st_size <= 0:
+                if len(missing) < 10:
+                    missing.append(utterance_id)
+                continue
+            try:
+                info = sf.info(destination)
+                output_bytes += destination.stat().st_size
+                output_seconds += float(info.duration)
+                if info.samplerate != sample_rate or info.channels != 1 or info.frames <= 0:
+                    if len(wrong_format) < 10:
+                        wrong_format.append(utterance_id)
+                if source_duration > 0:
+                    duration_relative_errors.append(
+                        abs(float(info.duration) - source_duration) / source_duration
+                    )
+                if index < finite_check_limit:
+                    audio, read_rate = sf.read(destination, dtype="float32", always_2d=False)
+                    if read_rate != sample_rate or not np.isfinite(audio).all() or audio.size == 0:
+                        if len(nonfinite) < 10:
+                            nonfinite.append(utterance_id)
+            except Exception as error:  # pragma: no cover - depends on decoder failure mode
+                if len(unreadable) < 10:
+                    unreadable.append(f"{utterance_id}: {error}")
 
-    ordered_plan_ids = [row["utt_id"] for row in plan_rows]
-    ordered_manifest_ids = [row["utt_id"] for row in manifest_rows]
-    id_order_matches = ordered_manifest_ids == ordered_plan_ids
     valid = (
-        len(plan_rows) == expected
-        and len(manifest_rows) == expected
-        and len(manifest_for) == expected
+        plan_rows_count == expected
+        and manifest_rows_count == expected
+        and len(manifest_ids) == expected
         and id_order_matches
         and not missing
         and not unreadable
@@ -99,9 +111,9 @@ def validate_outputs(
         "plan": str(plan_path.resolve()),
         "manifest": str(manifest_path.resolve()),
         "expected": expected,
-        "plan_rows": len(plan_rows),
-        "manifest_rows": len(manifest_rows),
-        "unique_manifest_ids": len(manifest_for),
+        "plan_rows": plan_rows_count,
+        "manifest_rows": manifest_rows_count,
+        "unique_manifest_ids": len(manifest_ids),
         "id_order_matches": id_order_matches,
         "source_seconds": source_seconds,
         "output_seconds": output_seconds,

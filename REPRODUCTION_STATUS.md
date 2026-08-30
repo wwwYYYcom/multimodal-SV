@@ -43,7 +43,7 @@
 
 ## 未完成
 
-- 按已生成计划批量匿名化 Fisher Part 1，完成 semi-informed 训练和 O-A/A-A 表格。
+- 按全 utterance 计划匿名化 Fisher Part 1 train split 的 572,951 条语音，随后从 corrected lazy checkpoint 初始化并重置 optimizer，完成 15 epoch semi-informed 训练和 O-A/A-A 表格；7,272 条 one-per-call-side 近似已中止且不用于结果。
 - Whisper/LUAR/prosody/RJCA 等 Level 2-3；说明文档明确建议 audio 闭环稳定后再做。
 
 ## 论文目标值

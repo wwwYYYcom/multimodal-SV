@@ -12,7 +12,7 @@ model:
 
 train:
   # Semi-informed attacker: initialize from corrected lazy weights, but reset optimizer.
-  # The anonymized manifest has one deterministic source per Fisher train call-side.
+  # The anonymized manifest contains every utterance in the local Fisher Part 1 train split.
   batch_size: 64
   gradient_accumulation: 1
   sampling_mode: all_utterances

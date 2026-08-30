@@ -1,13 +1,13 @@
 param(
     [string]$PythonExe = 'D:\codeAPP\anaconda3\envs\pytorch\python.exe',
-    [int]$SplitIndex = 3867,
+    [int]$SplitIndex = 301378,
     [int]$MonitorSeconds = 60
 )
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $projectRoot
-$plan = 'artifacts/anonymization/train_one_per_call_side_plan.csv'
+$plan = 'artifacts/anonymization/train_all_utterances_plan.csv'
 $finalManifest = 'artifacts/metadata/fisher_anonymized_train_corrected_manifest.csv'
 $streamVoiceRoot = 'third_party/StreamVoiceAnon'
 $sharedRunDir = 'results/runs/anonymization_train'
@@ -18,13 +18,32 @@ $splits = 'artifacts/metadata/speaker_splits.csv'
 $trials = 'artifacts/trials/evaluation.jsonl'
 $stamp = Get-Date -Format 'yyyyMMdd_HHmmss_fff'
 $runDir = Join-Path $sharedRunDir "dual_$stamp"
-$fullCount = 7272
+$fullCount = 572951
 $worker1Count = $SplitIndex
 $worker2Count = $fullCount - $SplitIndex
 $env:HF_HUB_OFFLINE = '1'
 $env:TRANSFORMERS_OFFLINE = '1'
 New-Item -ItemType Directory -Path $runDir -Force | Out-Null
 New-Item -ItemType Directory -Path $semiRunDir -Force | Out-Null
+
+$planAuditPath = [System.IO.Path]::ChangeExtension((Resolve-Path -LiteralPath $plan).Path, '.audit.json')
+$planAudit = Get-Content -LiteralPath $planAuditPath -Raw | ConvertFrom-Json
+if ($planAudit.source_utterances -ne $fullCount -or $planAudit.one_per_call_side) {
+    throw "Full-utterance train plan audit is invalid: $($planAudit | ConvertTo-Json -Compress)"
+}
+if ($SplitIndex -le 0 -or $SplitIndex -ge $fullCount) {
+    throw "SplitIndex must be within (0, $fullCount): $SplitIndex"
+}
+$projectedOutputBytes = 35828004345L
+$existingOutputBytes = if (Test-Path -LiteralPath 'artifacts/anonymized/train') {
+    [long]((Get-ChildItem -LiteralPath 'artifacts/anonymized/train' -File -Recurse | Measure-Object Length -Sum).Sum)
+} else { 0L }
+$remainingOutputBytes = [Math]::Max(0L, $projectedOutputBytes - $existingOutputBytes)
+$reserveBytes = 6L * 1024L * 1024L * 1024L
+$freeBytes = [long](Get-PSDrive -Name D).Free
+if ($freeBytes -lt ($remainingOutputBytes + $reserveBytes)) {
+    throw "Insufficient D: space: free=$freeBytes required=$($remainingOutputBytes + $reserveBytes)"
+}
 
 $worker1Manifest = Join-Path $runDir 'worker1.manifest.csv'
 $worker2Manifest = Join-Path $runDir 'worker2.manifest.csv'
@@ -47,6 +66,9 @@ Write-Output "worker1_count=$worker1Count"
 Write-Output "worker2_count=$worker2Count"
 Write-Output 'precision=fp32_weights_with_upstream_cuda_autocast'
 Write-Output 'huggingface_offline=true'
+Write-Output "existing_output_bytes=$existingOutputBytes"
+Write-Output "projected_output_bytes=$projectedOutputBytes"
+Write-Output "startup_free_bytes=$freeBytes"
 $anonymizationStarted = Get-Date
 $worker1 = Start-Process -FilePath $PythonExe `
     -ArgumentList ($common + @('--output-manifest', $worker1Manifest, '--limit', "$worker1Count")) `
