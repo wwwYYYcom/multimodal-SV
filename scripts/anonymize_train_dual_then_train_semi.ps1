@@ -1,7 +1,9 @@
 param(
     [string]$PythonExe = 'D:\codeAPP\anaconda3\envs\pytorch\python.exe',
     [int]$SplitIndex = 301378,
-    [int]$MonitorSeconds = 60
+    [int]$MonitorSeconds = 60,
+    [int]$MaxWorkerAttempts = 20,
+    [int]$MaxTrainingAttempts = 10
 )
 
 $ErrorActionPreference = 'Stop'
@@ -47,10 +49,6 @@ if ($freeBytes -lt ($remainingOutputBytes + $reserveBytes)) {
 
 $worker1Manifest = Join-Path $runDir 'worker1.manifest.csv'
 $worker2Manifest = Join-Path $runDir 'worker2.manifest.csv'
-$worker1Out = Join-Path $runDir 'worker1.stdout.log'
-$worker1Err = Join-Path $runDir 'worker1.stderr.log'
-$worker2Out = Join-Path $runDir 'worker2.stdout.log'
-$worker2Err = Join-Path $runDir 'worker2.stderr.log'
 $common = @(
     '-u', '-m', 'mmsv.cli', 'anonymize-streamvoice',
     '--plan', $plan,
@@ -58,6 +56,28 @@ $common = @(
     '--delay', '2',
     '--alpha', '1.0'
 )
+
+function Start-AnonymizationWorker {
+    param(
+        [int]$WorkerNumber,
+        [int]$Attempt,
+        [string]$Manifest,
+        [string[]]$SliceArguments
+    )
+    if ($Attempt -gt 1) {
+        $progress = [System.IO.Path]::ChangeExtension($Manifest, '.progress.jsonl')
+        if (Test-Path -LiteralPath $progress) {
+            $archivedProgress = Join-Path $runDir "worker$WorkerNumber.attempt$($Attempt - 1).progress.jsonl"
+            Move-Item -LiteralPath $progress -Destination $archivedProgress -Force
+        }
+    }
+    $stdout = Join-Path $runDir "worker$WorkerNumber.attempt$Attempt.stdout.log"
+    $stderr = Join-Path $runDir "worker$WorkerNumber.attempt$Attempt.stderr.log"
+    return Start-Process -FilePath $PythonExe `
+        -ArgumentList ($common + @('--output-manifest', $Manifest) + $SliceArguments) `
+        -WorkingDirectory $projectRoot -RedirectStandardOutput $stdout -RedirectStandardError $stderr `
+        -WindowStyle Hidden -PassThru
+}
 
 Write-Output "pipeline_started=$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')"
 Write-Output "run_dir=$((Resolve-Path -LiteralPath $runDir).Path)"
@@ -70,20 +90,60 @@ Write-Output "existing_output_bytes=$existingOutputBytes"
 Write-Output "projected_output_bytes=$projectedOutputBytes"
 Write-Output "startup_free_bytes=$freeBytes"
 $anonymizationStarted = Get-Date
-$worker1 = Start-Process -FilePath $PythonExe `
-    -ArgumentList ($common + @('--output-manifest', $worker1Manifest, '--limit', "$worker1Count")) `
-    -WorkingDirectory $projectRoot -RedirectStandardOutput $worker1Out -RedirectStandardError $worker1Err `
-    -WindowStyle Hidden -PassThru
-$worker2 = Start-Process -FilePath $PythonExe `
-    -ArgumentList ($common + @('--output-manifest', $worker2Manifest, '--start-index', "$SplitIndex")) `
-    -WorkingDirectory $projectRoot -RedirectStandardOutput $worker2Out -RedirectStandardError $worker2Err `
-    -WindowStyle Hidden -PassThru
-Write-Output "worker1_pid=$($worker1.Id)"
-Write-Output "worker2_pid=$($worker2.Id)"
+$workerStates = @(
+    @{
+        Number = 1; Expected = $worker1Count; Manifest = $worker1Manifest
+        SliceArguments = @('--limit', "$worker1Count"); Attempt = 1
+        Process = $null; Completed = $false
+    },
+    @{
+        Number = 2; Expected = $worker2Count; Manifest = $worker2Manifest
+        SliceArguments = @('--start-index', "$SplitIndex"); Attempt = 1
+        Process = $null; Completed = $false
+    }
+)
+foreach ($state in $workerStates) {
+    $state.Process = Start-AnonymizationWorker `
+        -WorkerNumber $state.Number -Attempt $state.Attempt `
+        -Manifest $state.Manifest -SliceArguments $state.SliceArguments
+    Write-Output "worker_started=$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz') worker=$($state.Number) attempt=$($state.Attempt) pid=$($state.Process.Id)"
+}
 
 $peakGpuMemoryMiB = 0
 $nextReport = Get-Date
-while (-not ($worker1.HasExited -and $worker2.HasExited)) {
+while (@($workerStates | Where-Object { -not $_.Completed }).Count -gt 0) {
+    foreach ($state in $workerStates) {
+        if ($state.Completed) {
+            continue
+        }
+        $state.Process.Refresh()
+        if (-not $state.Process.HasExited) {
+            continue
+        }
+        $state.Process.WaitForExit()
+        $auditPath = [System.IO.Path]::ChangeExtension($state.Manifest, '.audit.json')
+        $auditComplete = $false
+        if (Test-Path -LiteralPath $auditPath) {
+            $audit = Get-Content -LiteralPath $auditPath -Raw | ConvertFrom-Json
+            $auditComplete = $audit.processed -eq $state.Expected
+        }
+        if ($auditComplete) {
+            $state.Completed = $true
+            Write-Output "worker_completed=$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz') worker=$($state.Number) attempt=$($state.Attempt)"
+            continue
+        }
+        $exitCode = $state.Process.ExitCode
+        Write-Output "worker_failed=$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz') worker=$($state.Number) attempt=$($state.Attempt) exit_code=$exitCode"
+        if ($state.Attempt -ge $MaxWorkerAttempts) {
+            throw "Worker $($state.Number) exhausted $MaxWorkerAttempts attempts"
+        }
+        $state.Attempt += 1
+        Start-Sleep -Seconds 10
+        $state.Process = Start-AnonymizationWorker `
+            -WorkerNumber $state.Number -Attempt $state.Attempt `
+            -Manifest $state.Manifest -SliceArguments $state.SliceArguments
+        Write-Output "worker_restarted=$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz') worker=$($state.Number) attempt=$($state.Attempt) pid=$($state.Process.Id)"
+    }
     $memoryText = & nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits
     $memoryMiB = [int](($memoryText | Select-Object -First 1).Trim())
     if ($memoryMiB -gt $peakGpuMemoryMiB) {
@@ -94,15 +154,11 @@ while (-not ($worker1.HasExited -and $worker2.HasExited)) {
         $progress2 = [System.IO.Path]::ChangeExtension($worker2Manifest, '.progress.jsonl')
         $count1 = if (Test-Path -LiteralPath $progress1) { (Get-Content -LiteralPath $progress1).Count } else { 0 }
         $count2 = if (Test-Path -LiteralPath $progress2) { (Get-Content -LiteralPath $progress2).Count } else { 0 }
-        Write-Output "anonymization_progress=$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz') worker1=$count1/$worker1Count worker2=$count2/$worker2Count gpu_memory_mib=$memoryMiB"
+        Write-Output "anonymization_progress=$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz') worker1=$count1/$worker1Count attempt1=$($workerStates[0].Attempt) worker2=$count2/$worker2Count attempt2=$($workerStates[1].Attempt) gpu_memory_mib=$memoryMiB"
         $nextReport = (Get-Date).AddSeconds($MonitorSeconds)
     }
     Start-Sleep -Seconds 5
-    $worker1.Refresh()
-    $worker2.Refresh()
 }
-$worker1.WaitForExit()
-$worker2.WaitForExit()
 $anonymizationWallSeconds = ((Get-Date) - $anonymizationStarted).TotalSeconds
 
 $worker1Audit = [System.IO.Path]::ChangeExtension($worker1Manifest, '.audit.json')
@@ -138,8 +194,6 @@ Write-Output "anonymization_peak_gpu_memory_mib=$peakGpuMemoryMiB"
 Write-Output "anonymization_completed=$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')"
 
 $semiCheckpoint = Join-Path $semiRunDir 'last.pt'
-$trainOut = Join-Path $semiRunDir 'process.stdout.log'
-$trainErr = Join-Path $semiRunDir 'process.stderr.log'
 $trainCommon = @(
     '-u', '-m', 'mmsv.cli', 'train-audio',
     '--config', $semiConfig,
@@ -147,37 +201,47 @@ $trainCommon = @(
     '--splits', $splits,
     '--output-dir', $semiRunDir
 )
-if (Test-Path -LiteralPath $semiCheckpoint) {
-    $trainArgs = $trainCommon + @('--resume', $semiCheckpoint)
-    Write-Output 'training_mode=resume'
-} else {
-    $trainArgs = $trainCommon + @('--init-from', $lazyCheckpoint)
-    Write-Output 'training_mode=init_from_corrected_lazy_reset_optimizer'
-}
-$training = Start-Process -FilePath $PythonExe -ArgumentList $trainArgs `
-    -WorkingDirectory $projectRoot -RedirectStandardOutput $trainOut -RedirectStandardError $trainErr `
-    -WindowStyle Hidden -PassThru
-Write-Output "training_started=$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')"
-Write-Output "training_pid=$($training.Id)"
-while (-not $training.HasExited) {
-    Start-Sleep -Seconds $MonitorSeconds
-    $training.Refresh()
-    $memoryText = & nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits
-    $memoryMiB = [int](($memoryText | Select-Object -First 1).Trim())
-    $trainLines = if (Test-Path -LiteralPath (Join-Path $semiRunDir 'train.jsonl')) {
-        (Get-Content -LiteralPath (Join-Path $semiRunDir 'train.jsonl')).Count
-    } else { 0 }
-    Write-Output "training_progress=$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz') completed_epochs=$trainLines/15 gpu_memory_mib=$memoryMiB"
-}
-$training.WaitForExit()
-if (-not (Test-Path -LiteralPath $semiCheckpoint)) {
-    throw 'Semi-informed training ended without last.pt'
-}
-& $PythonExe scripts/validate_training_checkpoint.py `
-    --checkpoint $semiCheckpoint `
-    --expected-last-epoch 14
-if ($LASTEXITCODE -ne 0) {
-    throw 'Semi-informed checkpoint completeness validation failed'
+$trainingComplete = $false
+$trainingAttempt = 0
+while (-not $trainingComplete) {
+    $trainingAttempt += 1
+    if (Test-Path -LiteralPath $semiCheckpoint) {
+        $trainArgs = $trainCommon + @('--resume', $semiCheckpoint)
+        $trainingMode = 'resume'
+    } else {
+        $trainArgs = $trainCommon + @('--init-from', $lazyCheckpoint)
+        $trainingMode = 'init_from_corrected_lazy_reset_optimizer'
+    }
+    $trainOut = Join-Path $semiRunDir "process.attempt$trainingAttempt.stdout.log"
+    $trainErr = Join-Path $semiRunDir "process.attempt$trainingAttempt.stderr.log"
+    $training = Start-Process -FilePath $PythonExe -ArgumentList $trainArgs `
+        -WorkingDirectory $projectRoot -RedirectStandardOutput $trainOut -RedirectStandardError $trainErr `
+        -WindowStyle Hidden -PassThru
+    Write-Output "training_started=$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz') attempt=$trainingAttempt pid=$($training.Id) mode=$trainingMode"
+    while (-not $training.HasExited) {
+        Start-Sleep -Seconds $MonitorSeconds
+        $training.Refresh()
+        $memoryText = & nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits
+        $memoryMiB = [int](($memoryText | Select-Object -First 1).Trim())
+        $trainLines = if (Test-Path -LiteralPath (Join-Path $semiRunDir 'train.jsonl')) {
+            (Get-Content -LiteralPath (Join-Path $semiRunDir 'train.jsonl')).Count
+        } else { 0 }
+        Write-Output "training_progress=$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz') attempt=$trainingAttempt completed_epochs=$trainLines/15 gpu_memory_mib=$memoryMiB"
+    }
+    $training.WaitForExit()
+    if (Test-Path -LiteralPath $semiCheckpoint) {
+        & $PythonExe scripts/validate_training_checkpoint.py `
+            --checkpoint $semiCheckpoint `
+            --expected-last-epoch 14
+        $trainingComplete = $LASTEXITCODE -eq 0
+    }
+    if (-not $trainingComplete) {
+        Write-Output "training_failed=$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz') attempt=$trainingAttempt exit_code=$($training.ExitCode)"
+        if ($trainingAttempt -ge $MaxTrainingAttempts) {
+            throw "Semi-informed training exhausted $MaxTrainingAttempts attempts"
+        }
+        Start-Sleep -Seconds 30
+    }
 }
 Write-Output "training_completed=$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')"
 
