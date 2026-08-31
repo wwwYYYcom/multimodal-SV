@@ -54,7 +54,8 @@ $common = @(
     '--plan', $plan,
     '--streamvoice-root', $streamVoiceRoot,
     '--delay', '2',
-    '--alpha', '1.0'
+    '--alpha', '1.0',
+    '--max-source-chunk-seconds', '30.0'
 )
 
 function Start-AnonymizationWorker {

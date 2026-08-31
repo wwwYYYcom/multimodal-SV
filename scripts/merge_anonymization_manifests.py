@@ -88,10 +88,17 @@ def main() -> None:
         "processed": processed,
         "generated": sum(int(item["generated"]) for item in worker_audits),
         "skipped_existing": sum(int(item["skipped_existing"]) for item in worker_audits),
+        "generated_chunked_utterances": sum(
+            int(item.get("generated_chunked_utterances", 0)) for item in worker_audits
+        ),
+        "generated_inference_chunks": sum(
+            int(item.get("generated_inference_chunks", 0)) for item in worker_audits
+        ),
         "sample_rate": 16000,
         "delay": 2,
         "alpha": 1.0,
         "fp16": False,
+        "max_source_chunk_seconds": worker_audits[0].get("max_source_chunk_seconds"),
         "workers": worker_audits,
     }
     args.output.with_suffix(".audit.json").write_text(

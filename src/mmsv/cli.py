@@ -135,6 +135,7 @@ def _anonymize(args: argparse.Namespace) -> None:
         args.compile_encoder,
         args.compile_decoder,
         args.fp16,
+        args.max_source_chunk_seconds,
     ))
 
 
@@ -223,6 +224,12 @@ def build_parser() -> argparse.ArgumentParser:
     command.add_argument("--compile-encoder", action="store_true")
     command.add_argument("--compile-decoder", action="store_true")
     command.add_argument("--fp16", action="store_true")
+    command.add_argument(
+        "--max-source-chunk-seconds",
+        type=float,
+        default=30.0,
+        help="对更长 source 做等长分块后分别匿名化并拼接；避免上游 KV cache 越界",
+    )
     command.set_defaults(func=_anonymize)
 
     command = subparsers.add_parser("train-audio", help="训练 WavLM-Large + ECAPA-TDNN")

@@ -125,12 +125,15 @@ def test_anonymize_plan_streams_requested_slice_and_writes_atomic_manifest(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    inference_calls: list[str] = []
+
     class FakeWrapper:
         device = "cpu"
         sr = 16000
 
         @staticmethod
-        def infer(*args, **kwargs):
+        def infer(source_path, *args, **kwargs):
+            inference_calls.append(source_path)
             return np.full(320, 0.1, dtype=np.float32)
 
     monkeypatch.setattr(anonymization, "_load_streamvoice_wrapper", lambda *args, **kwargs: FakeWrapper())
@@ -165,10 +168,14 @@ def test_anonymize_plan_streams_requested_slice_and_writes_atomic_manifest(
         tmp_path,
         start_index=1,
         limit=1,
+        max_source_chunk_seconds=0.01,
     )
     with manifest.open("r", encoding="utf-8", newline="") as handle:
         rows = list(csv.DictReader(handle))
     assert result["processed"] == 1
     assert result["start_index"] == 1
+    assert result["generated_chunked_utterances"] == 1
+    assert result["generated_inference_chunks"] == 2
+    assert len(inference_calls) == 2
     assert [row["utt_id"] for row in rows] == ["u1"]
     assert not manifest.with_suffix(".csv.tmp").exists()

@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import itertools
 import json
+import math
 import os
 import random
 import sys
@@ -204,12 +205,15 @@ def anonymize_plan(
     compile_encoder: bool = False,
     compile_decoder: bool = False,
     fp16: bool = False,
+    max_source_chunk_seconds: float | None = 30.0,
 ) -> dict[str, object]:
     import soundfile as sf
     from scipy.signal import resample_poly
 
     if start_index < 0:
         raise ValueError("start_index must be non-negative")
+    if max_source_chunk_seconds is not None and max_source_chunk_seconds <= 0:
+        raise ValueError("max_source_chunk_seconds must be positive")
     root = Path(streamvoice_root).resolve()
     config = Path(config_path)
     checkpoint = Path(checkpoint_path)
@@ -239,6 +243,8 @@ def anonymize_plan(
     processed = 0
     generated = 0
     skipped = 0
+    generated_chunked_utterances = 0
+    generated_inference_chunks = 0
     with (
         Path(plan_csv).open("r", encoding="utf-8", newline="") as plan_handle,
         temporary_manifest.open("w", encoding="utf-8", newline="") as manifest_handle,
@@ -251,6 +257,7 @@ def anonymize_plan(
             item_started = time.perf_counter()
             destination = Path(row["output_audio_path"])
             destination.parent.mkdir(parents=True, exist_ok=True)
+            chunk_count = 0
             if destination.exists() and destination.stat().st_size > 0:
                 skipped += 1
             else:
@@ -262,19 +269,35 @@ def anonymize_plan(
                     ]
                 }
                 waveform = read_segment(source_row, sample_rate, sph2pipe)
+                max_chunk_samples = (
+                    waveform.size
+                    if max_source_chunk_seconds is None
+                    else max(1, round(sample_rate * max_source_chunk_seconds))
+                )
+                chunk_count = max(1, math.ceil(waveform.size / max_chunk_samples))
+                source_chunks = np.array_split(waveform, chunk_count)
                 with tempfile.TemporaryDirectory(prefix="mmsv_streamvoice_") as temporary:
                     temp_root = Path(temporary)
-                    source_wav = temp_root / "source.wav"
-                    sf.write(source_wav, np.asarray(waveform, dtype=np.float32), sample_rate)
-                    with _working_directory(root):
-                        generated_audio = wrapper.infer(
-                            str(source_wav),
-                            row["reference_audio_path"],
-                            delay=delay,
-                            alpha=alpha,
-                            save_result=False,
+                    generated_chunks: list[np.ndarray] = []
+                    for chunk_index, source_chunk in enumerate(source_chunks):
+                        source_wav = temp_root / f"source_{chunk_index:03d}.wav"
+                        sf.write(
+                            source_wav,
+                            np.asarray(source_chunk, dtype=np.float32),
+                            sample_rate,
                         )
-                    audio = np.asarray(generated_audio, dtype=np.float32)
+                        with _working_directory(root):
+                            generated_audio = wrapper.infer(
+                                str(source_wav),
+                                row["reference_audio_path"],
+                                delay=delay,
+                                alpha=alpha,
+                                save_result=False,
+                            )
+                        generated_chunks.append(
+                            np.asarray(generated_audio, dtype=np.float32).reshape(-1)
+                        )
+                    audio = np.concatenate(generated_chunks)
                     generated_rate = int(wrapper.sr)
                     if generated_rate != sample_rate:
                         divisor = int(np.gcd(generated_rate, sample_rate))
@@ -287,6 +310,9 @@ def anonymize_plan(
                     sf.write(temporary_output, audio, sample_rate, format="FLAC")
                     temporary_output.replace(destination)
                 generated += 1
+                generated_inference_chunks += chunk_count
+                if chunk_count > 1:
+                    generated_chunked_utterances += 1
 
             info = sf.info(destination)
             writer.writerow({
@@ -305,6 +331,7 @@ def anonymize_plan(
                 "utt_id": row["utt_id"],
                 "output": str(destination.resolve()),
                 "seconds": info.duration,
+                "chunks": chunk_count,
                 "elapsed_seconds": time.perf_counter() - item_started,
             }, ensure_ascii=False) + "\n")
             processed += 1
@@ -320,6 +347,8 @@ def anonymize_plan(
         "processed": processed,
         "generated": generated,
         "skipped_existing": skipped,
+        "generated_chunked_utterances": generated_chunked_utterances,
+        "generated_inference_chunks": generated_inference_chunks,
         "sample_rate": sample_rate,
         "delay": delay,
         "alpha": alpha,
@@ -328,6 +357,7 @@ def anonymize_plan(
         "compile_encoder": compile_encoder,
         "compile_decoder": compile_decoder,
         "fp16": fp16,
+        "max_source_chunk_seconds": max_source_chunk_seconds,
     }
     manifest_path.with_suffix(".audit.json").write_text(
         json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
