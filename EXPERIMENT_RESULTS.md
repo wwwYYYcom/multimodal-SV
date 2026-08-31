@@ -1238,3 +1238,38 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/anonymize_train_dual
 - 稳定性快照：2026-08-30 15:38:08 +08:00，worker 1/2 progress 为 79/301,378 与 42/271,573，GPU 显存 5,028 MiB；随后 15:39:04 输出目录共 197 条、9,463,283 字节。GPU 利用率约 75%、显存约 5,074/8,151 MiB、61°C、39.22 W；supervisor 与 worker stderr 均为空，无 OOM。
 - 主存快照：两个 StreamVoiceAnon worker working set 分别约 3.50 GB 与 3.40 GB；计划/manifest 已流式化，该内存主要为两个模型实例，不会随 572,951 行线性累积。
 - 匿名化预计约 17.4 天；按启动时间粗略推算约 2026-09-17 前后完成，实际完成时间以逐条源时长和机器连续运行情况为准。随后全量训练和两套 embedding/评分预计另需约 3 天。
+
+## 28. E29：全量匿名化超长输入故障、修正与恢复
+
+### 故障与根因
+
+- 发现时间：2026-08-31 13:05 +08:00。原 supervisor 仍在，但 worker 1 已于 08:29:59 停在计划索引 13,931；worker 2 继续运行。发现时累计约 30,687 / 572,951 条（5.36%）。
+- 精确故障输入：`fe_03_00170_B_0060`，source 43.24 秒，reference `3889-130125-0005` 为 14.045 秒。该输入在 StreamVoiceAnon 上游自回归推理约 703/930 帧处触发 vectorized gather 越界，随后表现为 CUDA device-side assert / CUBLAS internal error；并非显存不足。
+- 原 evaluation 匿名化计划的最长输入为 28.37 秒，因而此前 86,222 条 evaluation 音频可全部完成；全量 train 计划最长为 96.59 秒，超过 30 秒共 13 条，其中超过 40 秒 7 条。故障只在扩大为 572,951 条全量训练语音后暴露。
+- 原运行日志：`results\runs\anonymization_train\dual_20260830_153403_742\worker1.stderr.log`，27,312,946 字节，SHA-256 `2a48035ab9364b684e6c723a6a469f62b9e3139bcf96ccf0626c270bef477aa6`。原 supervisor stdout 为 142,522 字节，SHA-256 `db4fc21cd6550bebdd65a12e52fc7ace60fcc508616068a4e9b1ae4deab46d52`。
+
+### 修正、验证与 Git 记录
+
+- 监督脚本先加入 worker 非零退出自动恢复，单 worker 最多重试 20 次；后续训练最多重试 10 次。提交：`43263ca733d2108a46a012d17a731ab9dee80518`（`fix: restart failed long-running workers`）。这能处理偶发失败，但同一超长输入会确定性重现，不能单靠重试解决。
+- 最终修正：仅当 source 超过 30 秒时，将波形等分为不超过 30 秒的连续块；各块使用同一 reference、`delay=2`、`alpha=1` 独立匿名化，再按原顺序拼接并写为单个 FLAC。未超过阈值的 572,938 条语音路径完全不变。audit 新增 `generated_chunked_utterances`、`generated_inference_chunks` 与 `max_source_chunk_seconds`。
+- 精确故障样本 GPU smoke 于 2026-08-31 13:15:48 +08:00 完成：1 条 source 被分为 2 个推理块，输出 `artifacts\anonymized\train\3696\fe_03_00170_B_0060.flac`，359,805 字节、16 kHz、mono、43.189125 秒、finite=true；相对 source 时长误差 0.117657%。输出 SHA-256 `8e6c4e986d1de90cb248810db5648e93b3e7c80f993506227e4c00826f0fd654`。
+- smoke 文件：`results\runs\anonymization_train\long_utterance_chunk_smoke.manifest.csv`（265 字节，SHA-256 `12841dee92f108eb62ab228f7793d3c07207e4372b45ba1c695a2160018f66c2`）；对应 audit（824 字节，SHA-256 `6621d28c1591f9587d6902888f2c2a0bac2ff973fb7b4e6a09bb96d6c1561dcd`）与 progress（255 字节，SHA-256 `2813c832888e81f95d60de8cc363f553c22890ffe91033c72721959c15860181`）。
+- 验证：PowerShell AST 通过，全部 Python 测试 `22 passed`。最终修正提交：`e975a5e65733d0fc7d370073138c029ef7872fa5`（`fix: chunk overlong anonymization inputs`）。
+
+修正后运行代码指纹：
+
+| 文件 | 字节数 | SHA-256 |
+|---|---:|---|
+| `scripts\anonymize_train_dual_then_train_semi.ps1` | 13,563 | `1d65e35c4cb5e018508a66c0f042dcea873b73cd46325c61aa1400315e277422` |
+| `scripts\merge_anonymization_manifests.py` | 4,580 | `2c8d650b09b5a800b75d1639a3bef6e27f501c43d25c441b64cadada9694f7da` |
+| `src\mmsv\anonymization.py` | 15,168 | `3d4781acbe150014f2adb4e4a591d5c7110a2412e7da6751168f77ce09e522d0` |
+| `src\mmsv\cli.py` | 10,920 | `95bd799ffd9adb739f35410ec19ec541eba24b9e21e8e5681216a8d97fc1d323` |
+| `tests\test_anonymization.py` | 7,095 | `760c4813c2e83c6515227bd6b7c2e7d697beb9a394928b6668644b3f8baa0378` |
+
+### 正式恢复与当前快照
+
+- 保留之前已成功生成的 30,752 条左右输出，停止旧 supervisor/worker 后从已有 FLAC 断点跳过恢复，没有重做或删除有效产物。
+- 最终恢复时间：2026-08-31 13:17:15 +08:00；supervisor PID `94440`，worker 1/2 PID `102176/67860`；代码提交 `e975a5e65733d0fc7d370073138c029ef7872fa5`。
+- 运行目录：`results\runs\anonymization_train\dual_20260831_131714_406`。supervisor 日志：`results\runs\anonymization_train\full_chunked_supervisor.stdout.log`、`full_chunked_supervisor.stderr.log`；worker 日志为运行目录下 `worker1.attempt1.*.log`、`worker2.attempt1.*.log`，progress 为 `worker*.manifest.progress.jsonl`。
+- 13:18:36 快照已确认 worker 1 越过旧故障索引；13:23:22 累计输出 30,922 / 572,951 条（5.396971%），共 1,779,006,684 字节（1.6568 GiB）。两个 worker 均存活，GPU 利用率约 76%、显存约 4,954 / 8,151 MiB、63°C、39.65 W；D 盘剩余 42,053,750,784 字节（39.1656 GiB）。
+- 匿名化仍为当前阶段，尚未开始 semi-informed 15 epoch 训练。按原实测投影及本次约 4.8 小时单 worker 停机影响，预计匿名化约 2026-09-17 至 09-18 完成；机器暂停、后续异常和超长分块实际耗时会改变该日期。匿名化完成后监督脚本会自动合并/校验 manifest、开始训练并最终输出 O-A/A-A N=1/5/10/15。

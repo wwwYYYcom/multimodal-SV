@@ -39,7 +39,7 @@
 - O-A N=1/5/10/15 EER：`43.5243/38.4184/36.7995/36.6750%`。
 - lazy-informed A-A N=1/5/10/15 EER：`47.3848/39.3524/31.5068/25.7783%`。
 - 结果目录为 `results/o_a_corrected`、`results/a_a_corrected`；完整指标、文件路径、日志与 SHA-256 见 `EXPERIMENT_RESULTS.md` 第 26 节。
-- 全 utterance train 匿名化已于 2026-08-30 15:34:03 +08:00 启动：supervisor PID `48012`，worker PID `86028/98496`；GPU 稳态约 75%、5.1 GiB，预计匿名化约 17.4 天，完成后自动进入 15 epoch semi-informed 训练和 O-A/A-A 评分。
+- 全 utterance train 匿名化当前运行正常。初始任务在第 13,931 项的 43.24 秒超长语音上触发上游 2048 KV-cache CUDA 越界；现已对仅 13 条超过 30 秒的输入采用分块匿名化后拼接，并加入 worker 自动重启。2026-08-31 13:17:15 +08:00 以提交 `e975a5e` 恢复：supervisor PID `94440`，worker PID `102176/67860`。截至 13:23:22 已生成 30,922 / 572,951 条（5.396971%）、1,779,006,684 字节；两个 worker 均已越过原故障点，GPU 约 76%、4.95 GiB，D 盘剩余 42,053,750,784 字节。完成后自动进入 15 epoch semi-informed 训练和 O-A/A-A 评分。
 
 ## 未完成
 
