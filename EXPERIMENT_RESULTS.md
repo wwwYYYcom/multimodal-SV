@@ -1437,3 +1437,28 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/anonymize_train_dual
 - `sha256sum -c mmsv_05_fisher_p1_audio_20260901.all.sha256` 对第 1–16 片全部返回 `OK`；日志统计 `OK count=16`、`FAILED count=0`。结合前一节的 5,879 个解包文件与 5,850 条 SPHERE，Fisher Part 1 原始音频迁移现已完成 archive、逐字节、解包和数量四层验收。
 - 服务器校验日志路径：`/public/home/wwwyyycom123_/fisher_p1_audio_sha256_verification.log`。16 个上传 TAR 仍位于 `/public/home/wwwyyycom123_`；原始语料位于 `/public/home/wwwyyycom123_/datasets/corpora/fisher/fisher_eng_tr_sp_LDC2004S13`。
 - 本机清理前只读核对：`C:\mmsv_transfer` 中目标恰为 16 个 `mmsv_05_fisher_p1_audio_20260901.part*-of-016.tar`，合计 30,044,854,784 字节；16 份 audit、16 份 checksum 和 16 份文件清单均另行存在。自动精确删除命令被执行环境安全策略拒绝，因此 16 个 TAR 没有被删除，C 盘当时可用 25,242,247,168 字节。为避免后续约 23.89 GB LibriSpeech TAR 使系统盘接近满盘，必须由用户在本机只删除这 16 个已验证 TAR 后再进行 LibriSpeech 全量打包；原始 corpus、汇总清单和审计文件不得删除。
+
+### E30n：Fisher 本地临时包清理与 LibriSpeech 全量分片
+
+- 用户在本机 PowerShell 对精确目标再次核对得到 `count=16`、`bytes=30044854784`，随后删除 `C:\mmsv_transfer\mmsv_05_fisher_p1_audio_20260901.part*-of-016.tar`；复核 `remaining=0`。删除后 C 盘 `Free=58,458,714,112` 字节。删除不可直接恢复，但只涉及服务器已完成 16/16 SHA、解包和计数验收的可重建 TAR；原始 Fisher、服务器副本、audit、文件清单、单片/汇总 checksum 均保留。
+- LibriSpeech 范围严格为 `train-clean-360` 全目录，不包含 `train-other-500`。源目录共 106,111 个文件、23,890,436,826 字节；其中已建 reference pool 仍是先前审计的 99,278 条严格大于 4 秒 utterance，本次传输完整目录以保证路径可解析和范围内可复现性。
+- 13 个 TAR 于 2026-09-01 20:47 +08:00 前全部生成到 `C:\mmsv_transfer`，目标根为 `/public/home/wwwyyycom123_/datasets/corpora`。每片同时生成 `.files.txt`、`.audit.json` 与显式 LF `.sha256`；随后对 13 个 TAR 重新执行 `tar -tf`、成员数/audit 交叉核对和实际 SHA-256 计算，13/13 均为 `VERIFY_OK`。
+
+| Part | 文件数 | 源字节 | TAR 字节 | TAR SHA-256 |
+|---:|---:|---:|---:|---|
+| 1/13 | 8,501 | 1,899,922,717 | 1,914,953,216 | `8d572f36796c7c4142d28436ec1a0894d191ab318da1773fea0c9918f0988026` |
+| 2/13 | 8,336 | 1,899,979,737 | 1,914,741,248 | `8979801ce5e3afa7eab50cb17d1bbb0caa4c9362c0c27ca910ddc3f0e08244d9` |
+| 3/13 | 8,594 | 1,899,917,143 | 1,915,145,216 | `ef1d41490c5364d1318dbf9c2310b2f5ea7f6c659c07187df1180af3b8ca52b5` |
+| 4/13 | 8,303 | 1,899,741,515 | 1,914,472,960 | `a00b53a9efd1e9fa49936d1d58101b7cd4ec1a3a888fe6029a3702f335bb93f1` |
+| 5/13 | 8,407 | 1,899,794,184 | 1,914,711,552 | `03a15043ce75f18516ea1377041a62793f7da9a2454bc0d3caeb8ad14c0758cf` |
+| 6/13 | 8,359 | 1,899,996,717 | 1,914,790,912 | `edcda955c5ff181e8d4687294d95d00552b1619585f5ac1ffa02e7e163fab8b4` |
+| 7/13 | 8,581 | 1,899,776,289 | 1,914,967,040 | `b652e6b4195f27c087cba96927953db1adc8d4f0da9cac62a89dfb7a9e9a4e11` |
+| 8/13 | 8,455 | 1,899,880,722 | 1,914,856,960 | `2fe224528d31a9243f53858689d9504f1708204e85f88aeecb6a56d3193c3fc1` |
+| 9/13 | 8,359 | 1,899,786,747 | 1,914,594,304 | `ad74eff19e7ce590ad0136120b0077b412177e79169f9cd8eb04a61045f3a3ae` |
+| 10/13 | 8,509 | 1,899,945,724 | 1,915,009,024 | `25ab41c67baa4c3ba6f8c42a5f4e3d8fdf28a37bd55b3dc6d4bfe27dba218f1b` |
+| 11/13 | 8,358 | 1,899,998,559 | 1,914,802,688 | `111cb3cee8c642e405cdde38e48b375286b31c8b87780ae3400213e495ebfbd3` |
+| 12/13 | 8,431 | 1,899,858,230 | 1,914,778,112 | `a787336e0a52ae9a975e9384ec0937b888b4c079ad021d92e11d07a1dd92bda9` |
+| 13/13 | 4,918 | 1,091,838,542 | 1,100,547,072 | `6bee63cdf2e4c092e98df88fbcfdda2304a9899f5849a0e900d0eacff3a1b700` |
+
+- 汇总：13 个 TAR 共 106,111 个成员、24,078,370,304 字节。LF 汇总清单为 `C:\mmsv_transfer\mmsv_06_librispeech_train_clean_360_20260901.all.sha256`，1,690 字节，SHA-256 `5209833a68a7b715127fc5587ee64e320066eb0010b3ef879e55c29436ed07cc`。当前状态为“本机 13/13 已生成并全量复核，等待服务器上传、SHA、解包和计数验收”。
+- 资源快照：2026-09-01 20:50:04 +08:00，C 盘可用 34,317,537,280 字节；本机 supervisor/worker PID `94440/102176/67860` 均存活，匿名 train 输出 78,833 / 572,951 条（13.759117%），4,609,056,783 字节。
