@@ -211,3 +211,5 @@ tar -xf <archive>.tar -C "$MMSV_CORPORA"
 ```
 
 项目内产物使用项目根作为 `DestinationRoot` 和解包目录；corpora 使用 `MMSV_CORPORA`；WavLM snapshot 使用 `/public/home/wwwyyycom123_/.cache/huggingface/hub`。只有 SHA-256 与本机 `.sha256` 完全一致、成员路径正确且解包成功后，才把该片标记完成并生成下一片。本机正式任务在所有静态资源和服务器 smoke 验收前保持运行。
+
+WavLM 缓存只迁移 `models--microsoft--wavlm-large/refs/` 和已完成的 `snapshots/<commit>/`。不得打包 `*.incomplete`、`.no_exist/` 或 lock 文件；这些是下载残留/缓存状态，不是模型运行输入。当前有效 snapshot commit 为 `c1423ed94bb01d80a3f5ce5bc39f6026a0f4828c`。
