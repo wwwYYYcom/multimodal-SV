@@ -1473,3 +1473,26 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/anonymize_train_dual
 - `scripts/remap_artifacts_for_linux.sh` 同时加入 Linux target root 到自身的映射，使转换可安全重复执行；新增回归测试验证第二次 remap 不会把 Linux 绝对路径判为 unmapped。Git Bash `bash -n` 对两个 shell 脚本通过；全工程测试由 25 增至 `26 passed`；`git diff --check` 通过。
 - 文件指纹：`scripts/server_preflight_smoke.sh` 10,312 字节，SHA-256 `302a3fc31d61d5fc034c2f91200c647574f08adefe73ca9cb8aed41bf58c3b18`；`scripts/remap_artifacts_for_linux.sh` 1,293 字节，SHA-256 `c8c263c1c5ec72575227a0037fcdd12141a44cc8d198670687acf1c0872e66f2`；`tests/test_remap_csv_paths.py` 3,120 字节，SHA-256 `a48fb47044ecbe1fcb48257c8968a38a9f37924dc305497ee717d8965a8e480c`。
 - 执行边界：必须先完成 LibriSpeech 13/13 服务器 SHA、解包与 106,111/104,014/2,097 计数验收，再运行 remap、8-slice dry run 和该 preflight。只有 `server_preflight_smoke_ready=true` 后才能迁移 evaluation 匿名音频并进入最终本机断点切换；本节只是代码准备，不代表服务器 smoke 已运行。
+
+### E30p：服务器双 GPU preflight smoke 实机验收
+
+- 完成时间：2026-09-01 16:56:05 UTC（服务器 run ID `20260901_165605_142`）。输出根目录：`/public/home/wwwyyycom123_/multimodal_sv_reproduction/results/runs/server_preflight_smoke/20260901_165605_142`；最终验证文件为该目录下的 `validation.json`。
+- 普通短语音：输出为 16 kHz、单声道、30,465 frames、1.9040625 秒；预期 1.91 秒，相对时长误差 0.0031086387（0.310864%）；`finite=true`、`generated_chunked_utterances=0`、`generated_inference_chunks=1`。audit、stdout 和 stderr 分别为该 run 根目录下的 `normal.manifest.audit.json`、`normal.stdout.log` 和 `normal.stderr.log`。
+- 已知长音频故障样本 `fe_03_00170_B_0060`：输出 `/public/home/wwwyyycom123_/multimodal_sv_reproduction/results/runs/server_preflight_smoke/20260901_165605_142/long/3696/fe_03_00170_B_0060.flac`，322,301 字节，SHA-256 `fb437b5950afb27f7dd85396256ca85c2e8ffdd509c0563a69e0c62ca8ead0ef`；16 kHz、单声道、691,026 frames、43.189125 秒，预期 43.24 秒，相对误差 0.0011765726（0.117657%）；`finite=true`、`generated_chunked_utterances=1`、`generated_inference_chunks=2`。
+- 长音频 audit、stdout 和 stderr 分别为 run 根目录下的 `long.manifest.audit.json`、`long.stdout.log` 和 `long.stderr.log`。普通样本与长样本均满足小于 2% 的时长误差约束；长样本确实进入 30 秒切块路径并完成两次推理，因此服务器的 WavLM 离线加载、StreamVoiceAnon 权重加载、双 GPU 实际推理及超长输入修复均验收通过。
+- 验收结论：`server_preflight_smoke_ready=true` 的前置条件已经满足，可进入 evaluation 匿名音频迁移阶段；此时仍不停止本机正式 train 匿名化任务。
+
+### E30q：evaluation 匿名音频迁移包生成与全量复核
+
+- 完成时间：2026-09-02 01:07:56 +08:00。输入目录 `artifacts\anonymized\evaluation` 共 86,222 个 FLAC、5,585,060,420 字节；输出目录为 `C:\mmsv_transfer`，服务器解包根目录为 `/public/home/wwwyyycom123_/multimodal_sv_reproduction`。
+- 按约 1.9 GB 输入规模生成 3 个独立 TAR。随后逐片重新计算 SHA-256、执行 `tar -tf` 并统计 FLAC 成员；3/3 均可完整读取，成员合计恰好 86,222，无遗漏或重复计数。
+
+| Part | FLAC 数 | TAR 字节 | TAR SHA-256 | 首/末成员 |
+|---:|---:|---:|---|---|
+| 1/3 | 29,624 | 1,922,702,336 | `0815a1ba4c463dec5081b2fcb9a9cc3ae69f782d04c63e2fcb6877bbd19b46ef` | `1007/fe_03_01153_B_0001.flac` → `41390/fe_03_05103_A_0005.flac` |
+| 2/3 | 29,239 | 1,922,473,984 | `38c358e7a943e40b59b912e7f793a0504c9c10d8cd91e209f794430b0c2023c0` | `41390/fe_03_05103_A_0006.flac` → `72531/fe_03_05195_A_0056.flac` |
+| 3/3 | 27,359 | 1,806,115,328 | `cca8fdfff8a974936a3e0e44be62e900b164abc10325f7cf861ea50ef0f90d53` | `72531/fe_03_05195_A_0057.flac` → `9997/fe_03_00261_B_0059.flac` |
+
+- TAR 合计 5,651,291,648 字节。LF 格式汇总清单为 `C:\mmsv_transfer\mmsv_07_anonymized_evaluation_20260902.all.sha256`，SHA-256 `366e16b9757e16483daab2efcbd1fb925639ec842addb7fff05bd51adec77eb1`。三个 TAR 文件名为同目录下的 `mmsv_07_anonymized_evaluation_20260902.part001-of-003.tar` 至 `part003-of-003.tar`。
+- 本机正式任务未因打包而停止：01:07:56 +08:00 时 supervisor/worker PID `94440/102176/67860` 均存活；train 匿名输出为 84,761 / 572,951（14.793761%）、4,991,474,297 字节。C 盘在全部 evaluation TAR 与清单生成后可用 28,179,628,032 字节。
+- 当前迁移状态：evaluation 包已在本机生成并全量复核，等待上传到服务器、执行 3/3 `sha256sum -c`、解包并复核 86,222 个 FLAC；在服务器完成这些验收及最新 train 断点包迁移前，本机 supervisor 不停止。
