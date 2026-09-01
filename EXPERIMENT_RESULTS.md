@@ -1283,7 +1283,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/anonymize_train_dual
 - GPU：2 × NVIDIA GeForce RTX 4090 D，每张 PyTorch 可见显存 47.3731 GiB；`nvidia-smi` 报告驱动 595.58.03、CUDA 13.2、单卡 49,140 MiB，核验时均无运行进程。
 - CPU/内存：32 logical CPUs、251 GiB RAM、243 GiB available、无 swap。
 - 持久化 NFS：`/public/home/wwwyyycom123_`，总计约 20 TiB、可用约 13 TiB。容器根 overlay 虽有约 806 GiB 可用，但不作为正式持久化目录。
-- 缺失工具：`curl`、`rsync`、`tmux`、`ffmpeg`、`conda` 未检测到；迁移文档使用 sudo apt 安装前四项，并采用 Python venv，不依赖 conda。
+- 缺失工具：`curl`、`rsync`、`tmux`、`ffmpeg`、`conda` 未检测到；发行版尚待 `/etc/os-release` 确认（设备名 `/dev/mapper/rl-root` 提示可能是 Rocky/RHEL 系）。迁移文档先检测 `apt-get`/`dnf`/`yum` 再安装基础工具，并采用 Python venv，不依赖 conda。
 
 ### Linux 实现与验证
 
@@ -1298,7 +1298,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/anonymize_train_dual
 
 | 文件 | 字节数 | SHA-256 |
 |---|---:|---|
-| `SERVER_MIGRATION.md` | 6,102 | `bf4e5811106f46c62eca480e6a6b442768ff39a159365560ebbc8cd538f6df75` |
+| `SERVER_MIGRATION.md` | 6,538 | `099fca4bf2399c82b1d74c5f2c89cfc4bc4451820737f0d84739433568c77d8e` |
 | `scripts\anonymize_train_multigpu_then_train_semi.sh` | 10,792 | `1d8e6c74e7be0f1f92c4e0dc852f651647a2c9b87f0eddefd8afbf401bd0536b` |
 | `scripts\remap_artifacts_for_linux.sh` | 1,193 | `8b3eb7dd47ac42ca83b6d663d806c670386cf578489c607c3bdcc3e43873c7cb` |
 | `scripts\remap_csv_paths.py` | 4,337 | `5fe33088d03781e2a957b52e9e4dac6c80309e7d38c02ff0abd55460af3fdb1b` |

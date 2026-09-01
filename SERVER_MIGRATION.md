@@ -2,7 +2,7 @@
 
 ## 1. 已确认资源
 
-- 主机：`worker-0`，Ubuntu/Linux，Python 3.10.12。
+- 主机：`worker-0`，Linux（发行版需以 `/etc/os-release` 进一步确认），Python 3.10.12。
 - CPU/内存：32 logical CPUs、251 GiB RAM、无 swap。
 - GPU：2 × NVIDIA GeForce RTX 4090 D，每张 47.37 GiB 可见显存。
 - 驱动：595.58.03，`nvidia-smi` 报告 CUDA 13.2。
@@ -29,11 +29,25 @@ Fisher 为授权语料，只能传到满足许可证要求的私有存储；不�
 
 ## 3. 基础工具与隔离环境
 
-服务器当前未检测到 `curl`、`rsync`、`tmux`、`ffmpeg`、`conda`。若 sudo 可用：
+服务器当前未检测到 `curl`、`rsync`、`tmux`、`ffmpeg`、`conda`。先检查发行版和可用包管理器：
+
+```bash
+cat /etc/os-release
+command -v apt-get dnf yum
+sudo -n true && echo 'passwordless sudo available' || echo 'sudo may require a password'
+```
+
+Debian/Ubuntu 系列：
 
 ```bash
 sudo apt-get update
 sudo apt-get install -y curl rsync tmux ffmpeg libsndfile1 git
+```
+
+Rocky/RHEL 系列（`ffmpeg` 可能需要平台额外仓库，当前流水线不以系统 ffmpeg 为启动前置条件）：
+
+```bash
+sudo dnf install -y curl rsync tmux libsndfile git
 ```
 
 创建持久化 venv，并安装与本机成功运行环境一致的核心版本：
