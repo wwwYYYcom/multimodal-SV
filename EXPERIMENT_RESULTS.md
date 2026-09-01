@@ -1298,7 +1298,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/anonymize_train_dual
 
 | 文件 | 字节数 | SHA-256 |
 |---|---:|---|
-| `SERVER_MIGRATION.md` | 7,904 | `e0d817cd58f1c095c3e5e015c81400442d608d32e54cb331215a330cee43bbe3` |
+| `SERVER_MIGRATION.md` | 8,584 | `c493fb56716feba37d97ed64241d44113f3a692dd61ad2817f8a9d4c9624ee4d` |
 | `scripts\anonymize_train_multigpu_then_train_semi.sh` | 10,792 | `1d8e6c74e7be0f1f92c4e0dc852f651647a2c9b87f0eddefd8afbf401bd0536b` |
 | `scripts\remap_artifacts_for_linux.sh` | 1,193 | `8b3eb7dd47ac42ca83b6d663d806c670386cf578489c607c3bdcc3e43873c7cb` |
 | `scripts\remap_csv_paths.py` | 4,337 | `5fe33088d03781e2a957b52e9e4dac6c80309e7d38c02ff0abd55460af3fdb1b` |
@@ -1338,3 +1338,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/anonymize_train_dual
 - 软件验证：全工程 `25 passed`；StreamVoiceAnon `InferenceWrapper` import 成功；安装器最终输出 `server_environment_ready=true`。环境层面已满足双 GPU smoke 和正式匿名化要求。
 - 下一阶段：传输 StreamVoiceAnon 5 个正式 checkpoint（合计主要文件 1,489,631,664 字节）、WavLM-Large snapshot、Fisher Part 1、LibriSpeech train-clean-360、metadata/plan/trials、86,222 条 evaluation 匿名语音、corrected lazy checkpoint 和切换时最新 train 匿名断点；随后执行路径 remap 与两类 smoke。
 - 本机继续运行快照：2026-09-01 11:18:00 +08:00，64,113 / 572,951 条（11.189962%），3,751,585,675 字节；未因服务器环境安装而暂停。
+
+### E30d：服务器传输链路诊断
+
+- 服务器侧：`/usr/sbin/sshd` 存在，listener 进程正常，配置为 `0.0.0.0:22` 且支持 public-key authentication；持久化目录 `/public/home/wwwyyycom123_` 权限归当前用户，NFS 约 13 TiB 可用。
+- 容器 `hostname -I` 返回平台内部地址。本机于 2026-09-01 11:49 +08:00 对该地址执行只读 `Test-NetConnection -Port 22`，TCP 和 ping 均超时；因此该地址不能作为本机到 worker 的直接传输端点。
+- 结论：必须从平台控制台取得 SSH gateway/forward hostname、映射端口和用户名，或使用平台持久化数据集/NFS 导入功能。浏览器逐文件上传不适用于约 60–65 GiB、二十余万个文件的迁移。
+- 安全处置：诊断输出意外包含平台生成的明文登录凭证，已要求用户立即通过控制台或交互式 `passwd` 轮换；本工程代码、Markdown、日志摘要和 Git 历史均不记录该凭证或其哈希，后续只使用 SSH 公钥。
+- 本机继续运行：2026-09-01 11:49:56 +08:00，64,961 / 572,951 条（11.337968%），3,800,875,709 字节。
