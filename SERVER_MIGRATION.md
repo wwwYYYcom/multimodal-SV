@@ -53,21 +53,13 @@ sudo dnf install -y curl rsync tmux libsndfile git
 创建持久化 venv，并安装与本机成功运行环境一致的核心版本：
 
 ```bash
-python -m venv "$MMSV_VENV"
-source "$MMSV_VENV/bin/activate"
-python -m pip install --upgrade pip setuptools wheel
-python -m pip install \
-  torch==2.9.1 torchvision==0.24.1 torchaudio==2.9.1 \
-  --index-url https://download.pytorch.org/whl/cu128
-python -m pip install -e "$MMSV_HOME[audio,test]"
-python -m pip install \
-  accelerate==1.1.1 librosa==0.11.0 huggingface-hub==0.36.2 \
-  munch==4.0.0 einops==0.8.0 pydub==0.25.1 \
-  vector-quantize-pytorch==1.14.24 hydra-core==1.3.2 \
-  speechbrain==0.5.16 pyloudnorm==0.2.0 pyarrow==23.0.0 python-dotenv
+sudo apt-get install -y python3-venv
+cd "$MMSV_HOME"
+MMSV_HOME="$MMSV_HOME" MMSV_VENV="$MMSV_VENV" \
+  bash scripts/setup_linux_server_env.sh
 ```
 
-安装后核验：
+脚本将以重试方式安装与本机一致的 PyTorch 2.9.1+cu128 及 StreamVoiceAnon 推理依赖，执行全部 pytest 和 StreamVoice wrapper import，并把 Python、CUDA、双 GPU、依赖版本、Git HEAD 与完成时间写入 `results/runs/server_setup/environment.json`。安装后可再次核验：
 
 ```bash
 python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.device_count()); [print(i, torch.cuda.get_device_name(i)) for i in range(torch.cuda.device_count())]"
