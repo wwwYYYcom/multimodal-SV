@@ -61,3 +61,28 @@ def test_remap_csv_rejects_unmapped_absolute_path(tmp_path: Path) -> None:
     source.write_text("utt_id,audio_path\nu1,C:\\\\unknown\\\\a.wav\n", encoding="utf-8")
     with pytest.raises(ValueError, match="not covered"):
         remap_csv(source, tmp_path / "output.csv", [("D:/known", "/data")])
+
+
+def test_remap_csv_accepts_target_prefix_self_mapping(tmp_path: Path) -> None:
+    source = tmp_path / "server.csv"
+    source.write_text(
+        "utt_id,audio_path,output_audio_path\n"
+        "u1,/data/fisher/call.sph,/work/project/artifacts/u1.flac\n",
+        encoding="utf-8",
+    )
+    result = remap_csv(
+        source,
+        source,
+        [
+            ("D:/Corpora", "/data"),
+            ("D:/Project", "/work/project"),
+            ("/data", "/data"),
+            ("/work/project", "/work/project"),
+        ],
+    )
+    with source.open("r", encoding="utf-8", newline="") as handle:
+        row = next(csv.DictReader(handle))
+    assert row["audio_path"] == "/data/fisher/call.sph"
+    assert row["output_audio_path"] == "/work/project/artifacts/u1.flac"
+    assert result["mapped_values"] == 2
+    assert result["unmapped_absolute_values"] == 0

@@ -23,7 +23,9 @@ for file in "${files[@]}"; do
     "$PYTHON_EXE" scripts/remap_csv_paths.py \
         --input "$file" --output "$file" \
         --mapping "$WINDOWS_CORPORA_ROOT=$CORPORA_ROOT" \
-        --mapping "$WINDOWS_PROJECT_ROOT=$PROJECT_ROOT"
+        --mapping "$WINDOWS_PROJECT_ROOT=$PROJECT_ROOT" \
+        --mapping "$CORPORA_ROOT=$CORPORA_ROOT" \
+        --mapping "$PROJECT_ROOT=$PROJECT_ROOT"
 done
 
 echo "remap_completed=true project_root=$PROJECT_ROOT corpora_root=$CORPORA_ROOT"

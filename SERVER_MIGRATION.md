@@ -217,3 +217,35 @@ WavLM 缓存只迁移 `models--microsoft--wavlm-large/refs/` 和已完成的 `sn
 若 Windows bsdtar 的 `-T` 文件清单遇到非 ASCII 附加文件名而报 `wchar_t` 转换错误，使用分包器的 `-ExcludeRelativePath` 做精确排除，并在 audit 中保留证据；不得接受 tar 的非零退出码或上传部分生成的 TAR。Fisher Part 1 transcript 当前只排除不参与任何运行路径的附加说明 `fisher/fe_03_p1_tran_LDC2004T19/fe_03_p1_tran/doc/Fisher_English_数据集详细说明.txt`。
 
 上传 Windows 生成的历史汇总 SHA256 清单后，若 GNU `sha256sum` 报文件名带 `$'\r'`，先执行 `sed -i 's/\r$//' <manifest>`，再核验清单自身 SHA-256 和执行 `sha256sum -c`。当前 Fisher 16 片 LF 清单应为 1,888 字节，SHA-256 `b62d7cdbfa825ba65d4136e6cab4ec03d350fd29ef7f58898f3d944832809ddb`。
+
+## 9. 路径转换与双 GPU preflight
+
+完整数据到位后先更新代码、转换路径并检查 8 个 slice：
+
+```bash
+export MMSV_HOME=/public/home/wwwyyycom123_/multimodal_sv_reproduction
+export MMSV_CORPORA=/public/home/wwwyyycom123_/datasets/corpora
+export MMSV_VENV=/public/home/wwwyyycom123_/venvs/mmsv
+
+cd "$MMSV_HOME"
+git -c http.version=HTTP/1.1 pull --ff-only origin main
+source "$MMSV_VENV/bin/activate"
+
+PROJECT_ROOT="$MMSV_HOME" CORPORA_ROOT="$MMSV_CORPORA" \
+  bash scripts/remap_artifacts_for_linux.sh
+
+DRY_RUN=1 GPU_IDS=0,1 WORKERS_PER_GPU=4 \
+  bash scripts/anonymize_train_multigpu_then_train_semi.sh \
+  2>&1 | tee results/runs/anonymization_train/server_dry_run.log
+```
+
+预期 `dry_run_complete=true`、8 个连续互斥 slice、终点精确为 572,951。随后运行隔离的双 GPU smoke：
+
+```bash
+PROJECT_ROOT="$MMSV_HOME" PYTHON_EXE="$MMSV_VENV/bin/python" \
+GPU_IDS=0,1 HF_HOME=/public/home/wwwyyycom123_/.cache/huggingface \
+  bash scripts/server_preflight_smoke.sh \
+  2>&1 | tee results/runs/server_preflight_smoke.latest.log
+```
+
+脚本分别在 GPU0/GPU1 运行普通样本和 43.24 秒已知故障样本，隔离输出到 `results/runs/server_preflight_smoke/<timestamp>`。最终必须出现 `server_preflight_smoke_ready=true`；将最后输出的 `run_dir`、其中 `environment.json`、`weights.sha256.log`、`validation.json`、两组 stdout/stderr 和 `nvidia.*.csv` 全部保留。smoke 通过前不得停止本机任务或启动服务器正式 supervisor。

@@ -1462,3 +1462,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/anonymize_train_dual
 
 - 汇总：13 个 TAR 共 106,111 个成员、24,078,370,304 字节。LF 汇总清单为 `C:\mmsv_transfer\mmsv_06_librispeech_train_clean_360_20260901.all.sha256`，1,690 字节，SHA-256 `5209833a68a7b715127fc5587ee64e320066eb0010b3ef879e55c29436ed07cc`。当前状态为“本机 13/13 已生成并全量复核，等待服务器上传、SHA、解包和计数验收”。
 - 资源快照：2026-09-01 20:50:04 +08:00，C 盘可用 34,317,537,280 字节；本机 supervisor/worker PID `94440/102176/67860` 均存活，匿名 train 输出 78,833 / 572,951 条（13.759117%），4,609,056,783 字节。
+
+### E30o：服务器双 GPU preflight smoke 自动化
+
+- 为避免手工从 572,951 行 plan 取样、污染正式 train 输出或遗漏验证项，新增 `scripts/server_preflight_smoke.sh`。脚本只在独立的 `results/runs/server_preflight_smoke/<timestamp>` 目录生成产物，不写入 `artifacts/anonymized/train`。
+- 自动检查：PyTorch 可见两张指定 GPU；WavLM-Large 在 `HF_HUB_OFFLINE=1` 下解析为 `wavlm/1024/24`；五个 StreamVoiceAnon 权重、corrected lazy checkpoint 和 WavLM `pytorch_model.bin` 执行固定 SHA-256 验证。
+- 自动选样：从 remap 后 `train_all_utterances_plan.csv` 选取首条普通样本，并精确查找 plan 索引 13,930 的 `fe_03_00170_B_0060`（source 43.24 秒）；将两条输出路径改写到隔离 run directory。任何 Windows 路径、非绝对路径、源/参考文件缺失或长样本索引漂移均立即失败。
+- GPU 执行：普通样本固定在 `GPU_IDS` 第一张卡、43.24 秒故障样本固定在第二张卡并行运行；均使用 `delay=2`、`alpha=1`、`max_source_chunk_seconds=30`。输出 stdout/stderr、前后 `nvidia-smi`、manifest/progress/audit。
+- 验收：两进程退出码为 0；FLAC 非空、16 kHz、mono、finite；相对时长误差小于 2%；普通样本为 1 个 inference chunk，长样本必须为 2 chunks 且 `generated_chunked_utterances=1`；最终 `validation.json` 记录输出绝对路径、字节数、SHA-256、帧数、时长、误差和全部日志路径，并输出 `server_preflight_smoke_ready=true`。
+- `scripts/remap_artifacts_for_linux.sh` 同时加入 Linux target root 到自身的映射，使转换可安全重复执行；新增回归测试验证第二次 remap 不会把 Linux 绝对路径判为 unmapped。Git Bash `bash -n` 对两个 shell 脚本通过；全工程测试由 25 增至 `26 passed`；`git diff --check` 通过。
+- 文件指纹：`scripts/server_preflight_smoke.sh` 10,312 字节，SHA-256 `302a3fc31d61d5fc034c2f91200c647574f08adefe73ca9cb8aed41bf58c3b18`；`scripts/remap_artifacts_for_linux.sh` 1,293 字节，SHA-256 `c8c263c1c5ec72575227a0037fcdd12141a44cc8d198670687acf1c0872e66f2`；`tests/test_remap_csv_paths.py` 3,120 字节，SHA-256 `a48fb47044ecbe1fcb48257c8968a38a9f37924dc305497ee717d8965a8e480c`。
+- 执行边界：必须先完成 LibriSpeech 13/13 服务器 SHA、解包与 106,111/104,014/2,097 计数验收，再运行 remap、8-slice dry run 和该 preflight。只有 `server_preflight_smoke_ready=true` 后才能迁移 evaluation 匿名音频并进入最终本机断点切换；本节只是代码准备，不代表服务器 smoke 已运行。
