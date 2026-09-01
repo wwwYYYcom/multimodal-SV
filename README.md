@@ -129,6 +129,8 @@ mmsv score-mean --trials artifacts/trials/evaluation.jsonl --original-embeddings
 
 evaluation StreamVoiceAnon 的 86,222 条匿名化已完成并通过最终校验，实际双进程 RTF 为 0.6956、输出约 5.585 GB。匿名 embeddings 与 Mean O-A/A-A N=1/5/10/15 已于 2026-08-30 11:54:11 +08:00 全部完成：O-A EER 为 `43.5243/38.4184/36.7995/36.6750%`，lazy-informed A-A EER 为 `47.3848/39.3524/31.5068/25.7783%`。输出位于 `results/o_a_corrected` 与 `results/a_a_corrected`，完整审计记录见 `EXPERIMENT_RESULTS.md` 第 26 节。semi-informed 阶段采用 Fisher Part 1 train split 的全部 572,951 utterances，而不是 7,272 条 one-per-call-side 近似；全量计划和中止记录见总账第 27 节。
 
+双 RTX 4090 D Linux 服务器迁移使用 `scripts/remap_artifacts_for_linux.sh` 和 `scripts/anonymize_train_multigpu_then_train_semi.sh`；持久化目录、环境安装、数据传输、路径重写、8-worker dry run、正式启动和切换检查表见 [SERVER_MIGRATION.md](SERVER_MIGRATION.md)。本机任务在服务器 smoke 和最终增量同步完成前保持运行，不允许两个 supervisor 同时写同一共享输出目录。
+
 ## Git 版本管理
 
 主分支为 `main`，复现实验基线标签为 `v0.1.0-reproduction-baseline`。StreamVoiceAnon 使用 submodule 固定版本；clone 时应同时初始化 submodule：

@@ -1273,3 +1273,39 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/anonymize_train_dual
 - 运行目录：`results\runs\anonymization_train\dual_20260831_131714_406`。supervisor 日志：`results\runs\anonymization_train\full_chunked_supervisor.stdout.log`、`full_chunked_supervisor.stderr.log`；worker 日志为运行目录下 `worker1.attempt1.*.log`、`worker2.attempt1.*.log`，progress 为 `worker*.manifest.progress.jsonl`。
 - 13:18:36 快照已确认 worker 1 越过旧故障索引；13:23:22 累计输出 30,922 / 572,951 条（5.396971%），共 1,779,006,684 字节（1.6568 GiB）。两个 worker 均存活，GPU 利用率约 76%、显存约 4,954 / 8,151 MiB、63°C、39.65 W；D 盘剩余 42,053,750,784 字节（39.1656 GiB）。
 - 匿名化仍为当前阶段，尚未开始 semi-informed 15 epoch 训练。按原实测投影及本次约 4.8 小时单 worker 停机影响，预计匿名化约 2026-09-17 至 09-18 完成；机器暂停、后续异常和超长分块实际耗时会改变该日期。匿名化完成后监督脚本会自动合并/校验 manifest、开始训练并最终输出 O-A/A-A N=1/5/10/15。
+
+## 29. E30：双 RTX 4090 D Linux 服务器迁移准备
+
+### 服务器核验
+
+- 核验日期：2026-09-01 +08:00；主机 `worker-0`，用户目录 `/public/home/wwwyyycom123_`。
+- Python 3.10.12；系统预装 PyTorch `2.1.0+cu121`、CUDA available=true。该 PyTorch 低于工程 `torch>=2.4` 约束，不用于正式运行；迁移方案在持久化用户目录创建独立 venv，并安装与本机成功运行一致的 `torch 2.9.1+cu128`、`torchaudio 2.9.1+cu128`、`transformers 4.56.2`、NumPy 1.26.4、SciPy 1.13.1 等环境。
+- GPU：2 × NVIDIA GeForce RTX 4090 D，每张 PyTorch 可见显存 47.3731 GiB；`nvidia-smi` 报告驱动 595.58.03、CUDA 13.2、单卡 49,140 MiB，核验时均无运行进程。
+- CPU/内存：32 logical CPUs、251 GiB RAM、243 GiB available、无 swap。
+- 持久化 NFS：`/public/home/wwwyyycom123_`，总计约 20 TiB、可用约 13 TiB。容器根 overlay 虽有约 806 GiB 可用，但不作为正式持久化目录。
+- 缺失工具：`curl`、`rsync`、`tmux`、`ffmpeg`、`conda` 未检测到；迁移文档使用 sudo apt 安装前四项，并采用 Python venv，不依赖 conda。
+
+### Linux 实现与验证
+
+- 代码提交：`47bc1b3c12f3334de7b411beae131f53bebf5bb4`（`feat: add Linux multi-GPU migration pipeline`）。
+- `scripts/remap_csv_paths.py` 流式读取大型 CSV，最长前缀优先、大小写不敏感地把 Windows 路径转换为 Linux 路径；临时文件完整写入后原子替换。任何未覆盖的绝对路径默认报错，并写 `*.remap.audit.json`。
+- `scripts/remap_artifacts_for_linux.sh` 统一转换全量 train plan、Fisher manifest、LibriSpeech reference pool 和 anonymized evaluation manifest；默认映射本机 corpora/project 根目录，服务器目标由 `CORPORA_ROOT`/`PROJECT_ROOT` 显式指定。
+- `scripts/anonymize_train_multigpu_then_train_semi.sh` 默认使用 GPU `0,1`，每卡 4 个 StreamVoiceAnon worker，共 8 个互斥 slice；每个 worker 独立 manifest/progress/stdout/stderr，失败最多自动重启 20 次，已有非空 FLAC 断点跳过，超过 30 秒 source 继续使用分块拼接。全部 worker 完成后按原 plan 顺序合并 572,951 行 manifest、完整校验、训练 15 epochs，并自动完成 O-A/A-A N=1/5/10/15。
+- 8-worker dry run 完成时间：2026-09-01 10:18:43 +08:00。slice 1–7 各 71,619 行，起点依次为 0、71,619、143,238、214,857、286,476、358,095、429,714；slice 8 起点 501,333、71,618 行；终点精确为 572,951。
+- 验证：两个 Bash 文件 `bash -n` 通过；Python compileall 通过；路径重写、匿名化、合并校验及全工程测试共 `25 passed`；`git diff --check` 通过。
+
+迁移代码指纹：
+
+| 文件 | 字节数 | SHA-256 |
+|---|---:|---|
+| `SERVER_MIGRATION.md` | 6,102 | `bf4e5811106f46c62eca480e6a6b442768ff39a159365560ebbc8cd538f6df75` |
+| `scripts\anonymize_train_multigpu_then_train_semi.sh` | 10,792 | `1d8e6c74e7be0f1f92c4e0dc852f651647a2c9b87f0eddefd8afbf401bd0536b` |
+| `scripts\remap_artifacts_for_linux.sh` | 1,193 | `8b3eb7dd47ac42ca83b6d663d806c670386cf578489c607c3bdcc3e43873c7cb` |
+| `scripts\remap_csv_paths.py` | 4,337 | `5fe33088d03781e2a957b52e9e4dac6c80309e7d38c02ff0abd55460af3fdb1b` |
+| `tests\test_remap_csv_paths.py` | 2,254 | `b73f0b23864266188044888fbf58f23b289cdb1d9739ac160d942cf31726b1a7` |
+
+### 切换状态与本机快照
+
+- 状态：服务器迁移工具准备完成，但尚未停止本机、尚未传输数据、尚未在服务器启动正式任务。下一步是服务器安装工具/venv、获得 Git 代码和约 60–65 GiB 必需数据、路径转换、普通与 43.24 秒超长样本 smoke，然后才执行最终增量同步和切换。
+- 本机继续运行：2026-09-01 10:19:34 +08:00，supervisor PID `94440`、worker PID `102176/67860` 均存活；train 匿名输出 62,491 / 572,951 条（10.906866%），3,666,375,699 字节。GPU 快照 79%、7,066/8,151 MiB、71°C、46.79 W。
+- 服务器正式数据根规划为 `/public/home/wwwyyycom123_/datasets/corpora`，项目根规划为 `/public/home/wwwyyycom123_/multimodal_sv_reproduction`，venv 为 `/public/home/wwwyyycom123_/venvs/mmsv`；完整命令和切换检查表见 `SERVER_MIGRATION.md`。

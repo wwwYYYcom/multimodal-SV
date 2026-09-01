@@ -40,6 +40,7 @@
 - lazy-informed A-A N=1/5/10/15 EER：`47.3848/39.3524/31.5068/25.7783%`。
 - 结果目录为 `results/o_a_corrected`、`results/a_a_corrected`；完整指标、文件路径、日志与 SHA-256 见 `EXPERIMENT_RESULTS.md` 第 26 节。
 - 全 utterance train 匿名化当前运行正常。初始任务在第 13,931 项的 43.24 秒超长语音上触发上游 2048 KV-cache CUDA 越界；现已对仅 13 条超过 30 秒的输入采用分块匿名化后拼接，并加入 worker 自动重启。2026-08-31 13:17:15 +08:00 以提交 `e975a5e` 恢复：supervisor PID `94440`，worker PID `102176/67860`。截至 13:23:22 已生成 30,922 / 572,951 条（5.396971%）、1,779,006,684 字节；两个 worker 均已越过原故障点，GPU 约 76%、4.95 GiB，D 盘剩余 42,053,750,784 字节。完成后自动进入 15 epoch semi-informed 训练和 O-A/A-A 评分。
+- Linux 服务器迁移代码已于 2026-09-01 完成并提交 `47bc1b3`：目标 `worker-0` 有 2 × RTX 4090 D（每张 47.37 GiB）、32 logical CPUs、251 GiB RAM，持久化 NFS 位于 `/public/home/wwwyyycom123_` 且约 13 TiB 可用。已实现 Windows→Linux CSV 路径原子转换和 2 GPUs × 4 workers 可恢复流水线；8 个 slice dry run 精确覆盖 572,951 行。尚未切换，等待服务器工具/venv、数据传输与 smoke test。
 
 ## 未完成
 
