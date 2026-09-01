@@ -172,7 +172,7 @@ $audit = [ordered]@{
 )
 [IO.File]::WriteAllText(
     $checksumPath,
-    "$archiveHash  $($archive.Name)$([Environment]::NewLine)",
+    "$archiveHash  $($archive.Name)`n",
     $utf8NoBom
 )
 

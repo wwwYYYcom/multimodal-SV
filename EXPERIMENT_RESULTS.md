@@ -1417,3 +1417,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/anonymize_train_dual
 
 - 服务器状态边界：第 1 片已验收；第 2–16 片为“本机已生成并全量复核，等待逐片上传/解包验收”。在全部 16 片到达服务器前不得把 Fisher 音频标记为完整，也不得启动正式服务器 supervisor。
 - 本机资源快照：2026-09-01 15:33:17 +08:00，匿名 train 输出 71,087 / 572,951 条（12.407169%），4,141,619,209 字节；C 盘生成全部 Fisher TAR 后剩余 28,484,366,336 字节。由于后续 LibriSpeech 约 22.25 GiB 且仍需 evaluation/train 断点包，已在服务器验收的本地临时 TAR 必须按精确文件名清理或转移后才能继续全部数据打包；源 corpus、模型和审计小文件不得删除。
+
+### E30k：汇总 SHA256 清单 CRLF 兼容修正
+
+- 服务器首次执行 `sha256sum -c mmsv_05_fisher_p1_audio_20260901.all.sha256` 时，16 行均把 Windows `\r` 显示为文件名末尾 `$'\r'` 并报 `No such file or directory`。这不是 TAR 缺失或内容损坏，而是汇总清单采用 CRLF、GNU `sha256sum` 将 `\r` 作为文件名字符造成的跨平台文本格式错误；该次失败没有读取或解包任何 TAR。
+- 本机汇总清单已从 16 个 CRLF 原地规范化为 16 个 LF：字节数由 1,904 变为 1,888，CRLF 计数由 16 变为 0；规范化后的本机路径仍为 `C:\mmsv_transfer\mmsv_05_fisher_p1_audio_20260901.all.sha256`，新 SHA-256 为 `b62d7cdbfa825ba65d4136e6cab4ec03d350fd29ef7f58898f3d944832809ddb`。服务器对已上传清单执行 `sed -i 's/\r$//'` 会产生同一内容。
+- `scripts\create_server_transfer_pack.ps1` 的单片 `.sha256` 写出也从平台 `Environment.NewLine` 改为显式 LF，防止后续将单片清单上传 Linux 时复现。TAR、`.files.txt`、audit 和 16 个已生成 TAR 的 SHA-256 均未改变。
