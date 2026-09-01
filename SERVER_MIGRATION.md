@@ -2,7 +2,7 @@
 
 ## 1. 已确认资源
 
-- 主机：`worker-0`，Linux（发行版需以 `/etc/os-release` 进一步确认），Python 3.10.12。
+- 主机：`worker-0`，Ubuntu 22.04.3 LTS (Jammy Jellyfish)，Python 3.10.12。
 - CPU/内存：32 logical CPUs、251 GiB RAM、无 swap。
 - GPU：2 × NVIDIA GeForce RTX 4090 D，每张 47.37 GiB 可见显存。
 - 驱动：595.58.03，`nvidia-smi` 报告 CUDA 13.2。
@@ -90,6 +90,35 @@ python -m pytest -q
 当前阶段无需复制 `artifacts/cache/fisher_train_all_p1`（约 23.51 GiB）。匿名化从原始 Fisher SPHERE 读取；semi-informed 训练从生成后的匿名 FLAC 读取。
 
 优先通过平台提供的持久化数据集/NFS 导入功能传输。若平台提供 worker SSH 地址和端口，可从支持 rsync 的本机/WSL 执行增量传输；不要用浏览器逐文件上传十万级小文件。
+
+服务器首次 `git clone --recurse-submodules` 曾因外网链路中断报 `GnuTLS recv error (-110)`。这不是仓库或提交错误；主仓库可改用 HTTP/1.1、单请求、浅 fetch 的可重试初始化，避免每次失败都重新创建目录：
+
+```bash
+export MMSV_HOME=/public/home/wwwyyycom123_/multimodal_sv_reproduction
+mkdir -p "$MMSV_HOME"
+git -C "$MMSV_HOME" init
+git -C "$MMSV_HOME" remote remove origin 2>/dev/null || true
+git -C "$MMSV_HOME" remote add origin https://github.com/wwwYYYcom/multimodal-SV.git
+
+fetched=0
+for attempt in 1 2 3 4 5; do
+  if git -C "$MMSV_HOME" -c http.version=HTTP/1.1 -c http.maxRequests=1 \
+      fetch --depth=1 origin main; then
+    fetched=1
+    break
+  fi
+  echo "fetch attempt $attempt failed; retrying"
+  sleep 10
+done
+test "$fetched" -eq 1
+git -C "$MMSV_HOME" checkout -B main FETCH_HEAD
+
+GIT_HTTP_MAX_REQUESTS=1 git -C "$MMSV_HOME" -c http.version=HTTP/1.1 \
+  submodule update --init --depth=1 --jobs=1
+git -C "$MMSV_HOME" rev-parse HEAD
+```
+
+预期主仓库 HEAD 至少为记录服务器迁移代码的 `47bc1b3c12f3334de7b411beae131f53bebf5bb4`，实际应取远程 `main` 的更新提交。若 5 次均失败，停止重试并改用平台数据导入或从本机生成 `git bundle`，不要关闭 TLS 校验。
 
 ## 5. Windows 路径转换
 

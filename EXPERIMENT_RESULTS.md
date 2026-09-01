@@ -1298,7 +1298,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/anonymize_train_dual
 
 | 文件 | 字节数 | SHA-256 |
 |---|---:|---|
-| `SERVER_MIGRATION.md` | 6,538 | `099fca4bf2399c82b1d74c5f2c89cfc4bc4451820737f0d84739433568c77d8e` |
+| `SERVER_MIGRATION.md` | 7,792 | `2ccfac3abac1bacd4ef00b7bfebf7670aec6a52c0b88e8cce70fa592cc7df17f` |
 | `scripts\anonymize_train_multigpu_then_train_semi.sh` | 10,792 | `1d8e6c74e7be0f1f92c4e0dc852f651647a2c9b87f0eddefd8afbf401bd0536b` |
 | `scripts\remap_artifacts_for_linux.sh` | 1,193 | `8b3eb7dd47ac42ca83b6d663d806c670386cf578489c607c3bdcc3e43873c7cb` |
 | `scripts\remap_csv_paths.py` | 4,337 | `5fe33088d03781e2a957b52e9e4dac6c80309e7d38c02ff0abd55460af3fdb1b` |
@@ -1309,3 +1309,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/anonymize_train_dual
 - 状态：服务器迁移工具准备完成，但尚未停止本机、尚未传输数据、尚未在服务器启动正式任务。下一步是服务器安装工具/venv、获得 Git 代码和约 60–65 GiB 必需数据、路径转换、普通与 43.24 秒超长样本 smoke，然后才执行最终增量同步和切换。
 - 本机继续运行：2026-09-01 10:19:34 +08:00，supervisor PID `94440`、worker PID `102176/67860` 均存活；train 匿名输出 62,491 / 572,951 条（10.906866%），3,666,375,699 字节。GPU 快照 79%、7,066/8,151 MiB、71°C、46.79 W。
 - 服务器正式数据根规划为 `/public/home/wwwyyycom123_/datasets/corpora`，项目根规划为 `/public/home/wwwyyycom123_/multimodal_sv_reproduction`，venv 为 `/public/home/wwwyyycom123_/venvs/mmsv`；完整命令和切换检查表见 `SERVER_MIGRATION.md`。
+
+### E30a：服务器基础工具安装与首次 Git 获取
+
+- 结果接收时间：2026-09-01 10:28 +08:00；发行版最终确认为 Ubuntu 22.04.3 LTS (Jammy Jellyfish)。
+- `apt-get update` 从阿里云 Ubuntu mirror 成功更新索引；NVIDIA CUDA 官方源发生连接超时，但 apt 使用已有索引继续执行，没有阻塞本阶段工具安装，也没有改动当前可用的 GPU 驱动。
+- 安装成功：`curl 7.81.0`、`rsync 3.2.7`、`tmux 3.2a`、`ffmpeg 4.4.2`、`libsndfile1 1.0.31`；Git 从 2.34.1-1ubuntu1.11 更新到 2.34.1-1ubuntu1.17。
+- 首次 `git clone --recurse-submodules https://github.com/wwwYYYcom/multimodal-SV.git` 失败：`GnuTLS recv error (-110): The TLS connection was non-properly terminated`。因此 `/public/home/wwwyyycom123_/multimodal_sv_reproduction` 尚未形成有效 Git worktree；后续 `rev-parse` 的“目录不存在”是该失败的连带结果。
+- 修正方案：不关闭 TLS 校验；在目标持久化目录执行 `git init`，使用 HTTP/1.1、`http.maxRequests=1` 和 `fetch --depth=1` 最多重试 5 次，成功后 checkout `FETCH_HEAD`，再以单 job 获取 StreamVoiceAnon submodule。命令已写入 `SERVER_MIGRATION.md`。
+- 本机没有因服务器准备而停止：同一时刻 supervisor/worker PID `94440/102176/67860` 均存活；2026-09-01 10:28:42 +08:00 已有 62,702 / 572,951 条（10.943693%），3,679,413,298 字节。
