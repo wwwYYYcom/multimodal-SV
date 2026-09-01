@@ -182,3 +182,32 @@ tmux attach -t mmsv
 5. 核对服务器 FLAC 数量、总字节数和抽样 SHA-256。
 6. 只在上述核验通过后启动服务器正式 supervisor。
 7. 将切换时间、服务器路径、硬件、代码提交、文件数和日志路径追加到 `EXPERIMENT_RESULTS.md`。
+
+## 8. E-File 分包传输
+
+平台未提供外部 SSH 映射端口，但 E-File 的“本地上传”已通过 TAR 探针验证。正式数据不要逐文件上传；在 Windows 本机按稳定相对路径打成约 1.9 GB 输入数据一片的 TAR，每次只生成、上传并验收一片：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File scripts\create_server_transfer_pack.ps1 `
+  -Name fisher_audio `
+  -BaseDirectory 'D:\deeplearning\realtimeVoiceAnon\dataset\prefor_vpc2024\Voice-Privacy-Challenge-2024-main\corpora' `
+  -InputPath 'D:\deeplearning\realtimeVoiceAnon\dataset\prefor_vpc2024\Voice-Privacy-Challenge-2024-main\corpora\fisher\fisher_eng_tr_sp_LDC2004S13' `
+  -DestinationRoot '/public/home/wwwyyycom123_/datasets/corpora' `
+  -PartNumber 1
+```
+
+每片会在 `C:\mmsv_transfer` 输出 `.tar`、`.files.txt`、`.audit.json` 和 `.sha256`。通过 E-File 把 TAR 上传到 `/public/home/wwwyyycom123_/incoming/`，然后在服务器核验并解包：
+
+```bash
+export MMSV_HOME=/public/home/wwwyyycom123_/multimodal_sv_reproduction
+export MMSV_CORPORA=/public/home/wwwyyycom123_/datasets/corpora
+mkdir -p /public/home/wwwyyycom123_/incoming "$MMSV_CORPORA"
+
+cd /public/home/wwwyyycom123_/incoming
+sha256sum <archive>.tar
+tar -tf <archive>.tar | sed -n '1,3p;$p'
+tar -xf <archive>.tar -C "$MMSV_CORPORA"
+```
+
+项目内产物使用项目根作为 `DestinationRoot` 和解包目录；corpora 使用 `MMSV_CORPORA`；WavLM snapshot 使用 `/public/home/wwwyyycom123_/.cache/huggingface/hub`。只有 SHA-256 与本机 `.sha256` 完全一致、成员路径正确且解包成功后，才把该片标记完成并生成下一片。本机正式任务在所有静态资源和服务器 smoke 验收前保持运行。

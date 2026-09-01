@@ -1346,3 +1346,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/anonymize_train_dual
 - 结论：必须从平台控制台取得 SSH gateway/forward hostname、映射端口和用户名，或使用平台持久化数据集/NFS 导入功能。浏览器逐文件上传不适用于约 60–65 GiB、二十余万个文件的迁移。
 - 安全处置：诊断输出意外包含平台生成的明文登录凭证，已要求用户立即通过控制台或交互式 `passwd` 轮换；本工程代码、Markdown、日志摘要和 Git 历史均不记录该凭证或其哈希，后续只使用 SSH 公钥。
 - 本机继续运行：2026-09-01 11:49:56 +08:00，64,961 / 572,951 条（11.337968%），3,800,875,709 字节。
+
+### E30e：E-File 归档传输链路验收与第一批正式包
+
+- 平台容器详情未提供外部 SSH 映射端口，但 E-File 已确认支持“本地上传”文件。为避免浏览器逐个处理二十余万个小文件，迁移改为稳定排序的 TAR 分包；每次只在本机 `C:\mmsv_transfer` 暂存一包，服务器完成 SHA-256、成员和解包验收后再生成下一包。
+- 探针生成时间：2026-09-01 12:05 +08:00。本机文件 `C:\mmsv_transfer\mmsv_transfer_probe_20260901_1205.tar`，10,240 字节，SHA-256 `29ee1bdba02c258287e45f4b30770d34bb31d788fdabd0fa9786a4af1dd3609f`；唯一成员为 `SERVER_MIGRATION.md`。
+- 服务器验收完成时间：2026-09-01 12:09 +08:00。服务器上传路径 `/public/home/wwwyyycom123_/mmsv_transfer_probe_20260901_1205.tar` 的 SHA-256 与本机完全一致；解包输出 `/public/home/wwwyyycom123_/incoming/probe_unpacked/SERVER_MIGRATION.md` 的 SHA-256 为 `c493fb56716feba37d97ed64241d44113f3a692dd61ad2817f8a9d4c9624ee4`，也与本机源文件一致。结论：E-File 文件上传、TAR 列表、服务器解包和端到端内容校验均通过。
+- 新增运行代码 `scripts\create_server_transfer_pack.ps1`：输入 base directory、一个或多个输入路径、服务器 destination root、目标输入字节数和指定 part number；按相对路径稳定排序并计算全部分片，但只生成指定的一片，同时输出 `.tar`、`.files.txt`、`.audit.json` 和 `.sha256`。已有输出一律拒绝覆盖，以便断点迁移和审计。
+- 分包器 smoke 于 2026-09-01 12:09:01 +08:00 通过：以 `SERVER_MIGRATION.md` 为输入生成 1 个 10,240 字节 TAR，archive SHA-256 与独立探针相同，成员列表只有 `SERVER_MIGRATION.md`；PowerShell AST 和 `git diff --check` 通过。代码文件 5,018 字节，SHA-256 `c6b8f422b469c1a48ff405152446607161c53d5110f0e3065f7a9bd2a3835ed4`。
+- 第一批正式包生成完成时间：2026-09-01 12:07:00 +08:00。本机输出 `C:\mmsv_transfer\mmsv_01_streamvoice_checkpoints_20260901.tar`，1,489,640,960 字节，SHA-256 `62f63dec99e3f0c8f5aba6333b7e54aea3444e58fce34f0ffd027afd959fb434`。包内 `third_party/StreamVoiceAnon/pretrained_checkpoints/` 共 7 个文件，其中 5 个正式权重合计 1,489,631,664 字节，另有 2 个 Hugging Face 下载元数据文件；服务器目标为 `/public/home/wwwyyycom123_/multimodal_sv_reproduction/third_party/StreamVoiceAnon/pretrained_checkpoints/`。当前状态为“本机已生成并校验，等待 E-File 上传与服务器验收”。
+- 生成第一批包时本机任务未停止：2026-09-01 12:07:11 +08:00，65,374 / 572,951 条（11.410051%），3,827,849,755 字节；supervisor PID `94440`、worker PID `102176/67860` 仍存活。
