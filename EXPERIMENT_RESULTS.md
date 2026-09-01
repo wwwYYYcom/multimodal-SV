@@ -1423,3 +1423,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/anonymize_train_dual
 - 服务器首次执行 `sha256sum -c mmsv_05_fisher_p1_audio_20260901.all.sha256` 时，16 行均把 Windows `\r` 显示为文件名末尾 `$'\r'` 并报 `No such file or directory`。这不是 TAR 缺失或内容损坏，而是汇总清单采用 CRLF、GNU `sha256sum` 将 `\r` 作为文件名字符造成的跨平台文本格式错误；该次失败没有读取或解包任何 TAR。
 - 本机汇总清单已从 16 个 CRLF 原地规范化为 16 个 LF：字节数由 1,904 变为 1,888，CRLF 计数由 16 变为 0；规范化后的本机路径仍为 `C:\mmsv_transfer\mmsv_05_fisher_p1_audio_20260901.all.sha256`，新 SHA-256 为 `b62d7cdbfa825ba65d4136e6cab4ec03d350fd29ef7f58898f3d944832809ddb`。服务器对已上传清单执行 `sed -i 's/\r$//'` 会产生同一内容。
 - `scripts\create_server_transfer_pack.ps1` 的单片 `.sha256` 写出也从平台 `Environment.NewLine` 改为显式 LF，防止后续将单片清单上传 Linux 时复现。TAR、`.files.txt`、audit 和 16 个已生成 TAR 的 SHA-256 均未改变。
+
+### E30l：Fisher Part 1 原始音频服务器完整解包
+
+- 服务器端在 `set -euo pipefail` 下按文件名顺序解包 `mmsv_05_fisher_p1_audio_20260901.part001-of-016.tar` 至 `part016-of-016.tar`，16 次 `tar -xf` 均完成且未触发非零退出；目标根为 `/public/home/wwwyyycom123_/datasets/corpora`。
+- 解包后只读统计：`/public/home/wwwyyycom123_/datasets/corpora/fisher/fisher_eng_tr_sp_LDC2004S13` 共 5,879 个文件，其中 `*.sph` 精确为 5,850 条，与本机源 corpus 的全目录文件数和 Fisher Part 1 call 数完全一致。因此 16 片成员覆盖、目录结构和解包数量验收通过。
+- 验收边界：用户本轮输出没有附带规范化后 `sha256sum -c` 的 16 项结果，因此总账目前只确认“全部解包成功且计数一致”，尚不能把跨机逐字节校验标记为完成。本机约 30.04 GB Fisher 临时 TAR 在收到 16/16 SHA `OK` 前保留；收到后可删除这些可重建 TAR，但保留 `.audit.json`、`.files.txt`、`.sha256`、汇总清单及原始 corpus。
+- 本机正式任务保持运行：2026-09-01 20:32:02 +08:00，supervisor/worker PID `94440/102176/67860` 均存活；匿名 train 输出 78,548 / 572,951 条（13.709375%），4,582,332,471 字节；C 盘可用 28,055,535,616 字节。
