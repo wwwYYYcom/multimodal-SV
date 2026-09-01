@@ -1375,3 +1375,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/anonymize_train_dual
 - `scripts\create_server_transfer_pack.ps1` 新增 `-ExcludeRelativePath`，执行大小写不敏感的精确相对路径排除，并在 audit 写入 `excluded_file_count` 和完整排除列表；修正后文件 5,611 字节，SHA-256 `4faa15a84b895c56c103a9ce656ee7257f006445f2c906b042dc1f83d8fae0bc`。排除仅限上述附加中文说明，不涉及 transcript、calldata、LDC 文档或任何训练/评测输入。
 - 第四批可上传包完成时间：2026-09-01 13:28:30 +08:00。本机输出 `C:\mmsv_transfer\mmsv_04_fisher_p1_transcripts_runtime_20260901.part001-of-001.tar`，296,188,416 字节，SHA-256 `68377eace95962cff93c6cebeaf2ab1350bf1d99da6ee13fffe24744ae197fa0`；共 31,236 个成员、源文件 272,191,172 字节，`tar -tf` 返回 31,236 行且退出码为 0。服务器目标为 `/public/home/wwwyyycom123_/datasets/corpora`，当前状态为“本机已生成并校验，等待上传与服务器验收”。
 - 第四批关键文件指纹：`doc/fe_03_p1_calldata.tbl` 471,434 字节，SHA-256 `a612620cb4e3d47818524ebe989bd4c0b14294cb2422dfa64b8a2f1fbbba3fda`；`data/trans/000/fe_03_00001.txt` 13,705 字节，SHA-256 `19e18082c4123f9e60d0f35d5cbc03ef8fa4f79288c0b03c52029b3da19edaac`；corpus `index.html` 2,825 字节，SHA-256 `a5904be0f0ea5985d2e1c98f1df41a8483442d9758b04cf97093fec571ec1015`。
+
+### E30h：Fisher transcript 验收与原始音频分片启动
+
+- 第四批服务器验收结果于 2026-09-01 13:39 +08:00 收到：整包 SHA-256 `68377eace95962cff93c6cebeaf2ab1350bf1d99da6ee13fffe24744ae197fa0` 与本机一致；上传 TAR 成员数和服务器解包文件数均为 31,236；calldata、代表 transcript 和 `index.html` 三项 SHA-256 全部为 `OK`。第四批状态更新为“服务器已解包并验收完成”。
+- 第五批 Fisher Part 1 原始音频按 1,900,000,000 目标输入字节计算为 16 片；全目录 5,879 个文件、30,040,328,697 字节，其中包括 5,850 个 SPHERE calls 及 LDC 目录附属文件。archive 成员保持相对于 `/public/home/wwwyyycom123_/datasets/corpora` 的完整 corpus 结构。
+- 第 1/16 片完成时间：2026-09-01 13:39:11 +08:00。本机输出 `C:\mmsv_transfer\mmsv_05_fisher_p1_audio_20260901.part001-of-016.tar`，1,895,350,272 字节，SHA-256 `6191a3593aa68acb888c8600a600fe559ef6e1ba6be1265ff84e271bd7ad9594`；包含 329 个文件、源字节 1,895,093,518，首成员为 corpus `.DS_Store`，末成员为 `audio/003/fe_03_00327.sph`；`tar -tf` 精确返回 329 行。当前状态为“本机已生成并校验，等待上传与服务器验收”。
+- 生成第 1 片时本机正式任务仍运行：2026-09-01 13:39:15 +08:00，67,902 / 572,951 条（11.851275%），3,968,577,285 字节。
