@@ -61,6 +61,8 @@ MMSV_HOME="$MMSV_HOME" MMSV_VENV="$MMSV_VENV" \
 
 脚本将以重试方式安装与本机一致的 PyTorch 2.9.1+cu128 及 StreamVoiceAnon 推理依赖，执行全部 pytest 和 StreamVoice wrapper import，并把 Python、CUDA、双 GPU、依赖版本、Git HEAD 与完成时间写入 `results/runs/server_setup/environment.json`。安装后可再次核验：
 
+正式服务器环境已于 2026-09-01 11:16:24 +08:00 按该脚本验收通过：`25 passed`、`streamvoice_import=true`、`server_environment_ready=true`，两张 47.37 GiB RTX 4090 D 均由 PyTorch 2.9.1+cu128 正确识别。
+
 ```bash
 python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.device_count()); [print(i, torch.cuda.get_device_name(i)) for i in range(torch.cuda.device_count())]"
 python -m pytest -q

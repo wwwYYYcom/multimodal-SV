@@ -1298,7 +1298,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/anonymize_train_dual
 
 | 文件 | 字节数 | SHA-256 |
 |---|---:|---|
-| `SERVER_MIGRATION.md` | 7,674 | `ea197579e80f0882de5f7994c7418e876de5b2170bdd2d149d306dab46918fd0` |
+| `SERVER_MIGRATION.md` | 7,904 | `e0d817cd58f1c095c3e5e015c81400442d608d32e54cb331215a330cee43bbe3` |
 | `scripts\anonymize_train_multigpu_then_train_semi.sh` | 10,792 | `1d8e6c74e7be0f1f92c4e0dc852f651647a2c9b87f0eddefd8afbf401bd0536b` |
 | `scripts\remap_artifacts_for_linux.sh` | 1,193 | `8b3eb7dd47ac42ca83b6d663d806c670386cf578489c607c3bdcc3e43873c7cb` |
 | `scripts\remap_csv_paths.py` | 4,337 | `5fe33088d03781e2a957b52e9e4dac6c80309e7d38c02ff0abd55460af3fdb1b` |
@@ -1327,3 +1327,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/anonymize_train_dual
 - 实现提交：`7bc526a3cba219405ce17e9212fd5b9b0f58b490`（`feat: add reproducible Linux environment setup`）；Bash 语法检查、全部 `25 passed` 和 `git diff --check` 通过。
 - 文件指纹：`scripts\setup_linux_server_env.sh` 3,760 字节，SHA-256 `4a15198716fd3bedafca464f2343d2e4f4dfc6583c3e9aab2dc35b3c2314639e`；更新后的 `SERVER_MIGRATION.md` 7,674 字节，SHA-256 `ea197579e80f0882de5f7994c7418e876de5b2170bdd2d149d306dab46918fd0`。
 - 本机任务仍未停止：2026-09-01 10:34:16 +08:00 已生成 62,842 / 572,951 条（10.968128%），3,687,267,801 字节。
+
+### E30c：服务器 Python/CUDA 环境验收完成
+
+- 完成时间：audit 为 `2026-09-01T03:16:24.272473+00:00`，即 2026-09-01 11:16:24.272473 +08:00。
+- 输出：`/public/home/wwwyyycom123_/multimodal_sv_reproduction/results/runs/server_setup/environment.json`；安装日志：同目录 `setup.log`；Python executable：`/public/home/wwwyyycom123_/venvs/mmsv/bin/python`。
+- Git HEAD：`efa563cc0925b9c1c542c73865c0940318dac916`；hostname `worker-0`；platform `Linux-5.14.0-284.11.1.el9_2.x86_64-x86_64-with-glibc2.35`；Python `3.10.12`，venv 位于持久化 NFS。
+- 关键版本：PyTorch `2.9.1+cu128`、PyTorch CUDA `12.8`、torchaudio `2.9.1+cu128`、transformers `4.56.2`、NumPy `1.26.4`、SciPy `1.13.1`、soundfile `0.13.1`。
+- GPU 验收：`cuda_available=true`、`cuda_device_count=2`；GPU 0/1 均为 NVIDIA GeForce RTX 4090 D，每张 `50,866,487,296` bytes（47.37 GiB）可见显存。
+- 软件验证：全工程 `25 passed`；StreamVoiceAnon `InferenceWrapper` import 成功；安装器最终输出 `server_environment_ready=true`。环境层面已满足双 GPU smoke 和正式匿名化要求。
+- 下一阶段：传输 StreamVoiceAnon 5 个正式 checkpoint（合计主要文件 1,489,631,664 字节）、WavLM-Large snapshot、Fisher Part 1、LibriSpeech train-clean-360、metadata/plan/trials、86,222 条 evaluation 匿名语音、corrected lazy checkpoint 和切换时最新 train 匿名断点；随后执行路径 remap 与两类 smoke。
+- 本机继续运行快照：2026-09-01 11:18:00 +08:00，64,113 / 572,951 条（11.189962%），3,751,585,675 字节；未因服务器环境安装而暂停。
