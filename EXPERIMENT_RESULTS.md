@@ -1430,3 +1430,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/anonymize_train_dual
 - 解包后只读统计：`/public/home/wwwyyycom123_/datasets/corpora/fisher/fisher_eng_tr_sp_LDC2004S13` 共 5,879 个文件，其中 `*.sph` 精确为 5,850 条，与本机源 corpus 的全目录文件数和 Fisher Part 1 call 数完全一致。因此 16 片成员覆盖、目录结构和解包数量验收通过。
 - 验收边界：用户本轮输出没有附带规范化后 `sha256sum -c` 的 16 项结果，因此总账目前只确认“全部解包成功且计数一致”，尚不能把跨机逐字节校验标记为完成。本机约 30.04 GB Fisher 临时 TAR 在收到 16/16 SHA `OK` 前保留；收到后可删除这些可重建 TAR，但保留 `.audit.json`、`.files.txt`、`.sha256`、汇总清单及原始 corpus。
 - 本机正式任务保持运行：2026-09-01 20:32:02 +08:00，supervisor/worker PID `94440/102176/67860` 均存活；匿名 train 输出 78,548 / 572,951 条（13.709375%），4,582,332,471 字节；C 盘可用 28,055,535,616 字节。
+
+### E30m：Fisher Part 1 跨机逐字节验收完成
+
+- 服务器将汇总清单规范化为 LF 后，其 SHA-256 为 `b62d7cdbfa825ba65d4136e6cab4ec03d350fd29ef7f58898f3d944832809ddb`，与本机规范化清单完全一致。
+- `sha256sum -c mmsv_05_fisher_p1_audio_20260901.all.sha256` 对第 1–16 片全部返回 `OK`；日志统计 `OK count=16`、`FAILED count=0`。结合前一节的 5,879 个解包文件与 5,850 条 SPHERE，Fisher Part 1 原始音频迁移现已完成 archive、逐字节、解包和数量四层验收。
+- 服务器校验日志路径：`/public/home/wwwyyycom123_/fisher_p1_audio_sha256_verification.log`。16 个上传 TAR 仍位于 `/public/home/wwwyyycom123_`；原始语料位于 `/public/home/wwwyyycom123_/datasets/corpora/fisher/fisher_eng_tr_sp_LDC2004S13`。
+- 本机清理前只读核对：`C:\mmsv_transfer` 中目标恰为 16 个 `mmsv_05_fisher_p1_audio_20260901.part*-of-016.tar`，合计 30,044,854,784 字节；16 份 audit、16 份 checksum 和 16 份文件清单均另行存在。自动精确删除命令被执行环境安全策略拒绝，因此 16 个 TAR 没有被删除，C 盘当时可用 25,242,247,168 字节。为避免后续约 23.89 GB LibriSpeech TAR 使系统盘接近满盘，必须由用户在本机只删除这 16 个已验证 TAR 后再进行 LibriSpeech 全量打包；原始 corpus、汇总清单和审计文件不得删除。
