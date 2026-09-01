@@ -9,6 +9,8 @@ param(
     [Parameter(Mandatory = $true)]
     [string[]]$InputPath,
 
+    [string[]]$ExcludeRelativePath = @(),
+
     [Parameter(Mandatory = $true)]
     [string]$DestinationRoot,
 
@@ -63,7 +65,21 @@ foreach ($input in $InputPath) {
     }
 }
 
-$orderedFiles = @($allFiles | Sort-Object RelativePath -Unique)
+$normalizedExclusions = @(
+    $ExcludeRelativePath |
+        ForEach-Object { $_.Replace('\', '/').TrimStart('/') } |
+        Sort-Object -Unique
+)
+$exclusionSet = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+foreach ($excludedPath in $normalizedExclusions) {
+    $null = $exclusionSet.Add($excludedPath)
+}
+
+$orderedFiles = @(
+    $allFiles |
+        Where-Object { -not $exclusionSet.Contains($_.RelativePath) } |
+        Sort-Object RelativePath -Unique
+)
 if ($orderedFiles.Count -eq 0) {
     throw 'No input files were found.'
 }
@@ -143,6 +159,8 @@ $audit = [ordered]@{
     selected_input_bytes = $inputBytes
     total_file_count = $orderedFiles.Count
     total_input_bytes = $allInputBytes
+    excluded_file_count = $normalizedExclusions.Count
+    excluded_relative_paths = $normalizedExclusions
     first_member = $selected[0].RelativePath
     last_member = $selected[-1].RelativePath
 }

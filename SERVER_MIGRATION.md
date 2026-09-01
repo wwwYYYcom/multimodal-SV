@@ -213,3 +213,5 @@ tar -xf <archive>.tar -C "$MMSV_CORPORA"
 项目内产物使用项目根作为 `DestinationRoot` 和解包目录；corpora 使用 `MMSV_CORPORA`；WavLM snapshot 使用 `/public/home/wwwyyycom123_/.cache/huggingface/hub`。只有 SHA-256 与本机 `.sha256` 完全一致、成员路径正确且解包成功后，才把该片标记完成并生成下一片。本机正式任务在所有静态资源和服务器 smoke 验收前保持运行。
 
 WavLM 缓存只迁移 `models--microsoft--wavlm-large/refs/` 和已完成的 `snapshots/<commit>/`。不得打包 `*.incomplete`、`.no_exist/` 或 lock 文件；这些是下载残留/缓存状态，不是模型运行输入。当前有效 snapshot commit 为 `c1423ed94bb01d80a3f5ce5bc39f6026a0f4828c`。
+
+若 Windows bsdtar 的 `-T` 文件清单遇到非 ASCII 附加文件名而报 `wchar_t` 转换错误，使用分包器的 `-ExcludeRelativePath` 做精确排除，并在 audit 中保留证据；不得接受 tar 的非零退出码或上传部分生成的 TAR。Fisher Part 1 transcript 当前只排除不参与任何运行路径的附加说明 `fisher/fe_03_p1_tran_LDC2004T19/fe_03_p1_tran/doc/Fisher_English_数据集详细说明.txt`。
