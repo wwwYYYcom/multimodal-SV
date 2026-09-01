@@ -1298,7 +1298,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/anonymize_train_dual
 
 | 文件 | 字节数 | SHA-256 |
 |---|---:|---|
-| `SERVER_MIGRATION.md` | 7,792 | `2ccfac3abac1bacd4ef00b7bfebf7670aec6a52c0b88e8cce70fa592cc7df17f` |
+| `SERVER_MIGRATION.md` | 7,674 | `ea197579e80f0882de5f7994c7418e876de5b2170bdd2d149d306dab46918fd0` |
 | `scripts\anonymize_train_multigpu_then_train_semi.sh` | 10,792 | `1d8e6c74e7be0f1f92c4e0dc852f651647a2c9b87f0eddefd8afbf401bd0536b` |
 | `scripts\remap_artifacts_for_linux.sh` | 1,193 | `8b3eb7dd47ac42ca83b6d663d806c670386cf578489c607c3bdcc3e43873c7cb` |
 | `scripts\remap_csv_paths.py` | 4,337 | `5fe33088d03781e2a957b52e9e4dac6c80309e7d38c02ff0abd55460af3fdb1b` |
@@ -1318,3 +1318,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/anonymize_train_dual
 - 首次 `git clone --recurse-submodules https://github.com/wwwYYYcom/multimodal-SV.git` 失败：`GnuTLS recv error (-110): The TLS connection was non-properly terminated`。因此 `/public/home/wwwyyycom123_/multimodal_sv_reproduction` 尚未形成有效 Git worktree；后续 `rev-parse` 的“目录不存在”是该失败的连带结果。
 - 修正方案：不关闭 TLS 校验；在目标持久化目录执行 `git init`，使用 HTTP/1.1、`http.maxRequests=1` 和 `fetch --depth=1` 最多重试 5 次，成功后 checkout `FETCH_HEAD`，再以单 job 获取 StreamVoiceAnon submodule。命令已写入 `SERVER_MIGRATION.md`。
 - 本机没有因服务器准备而停止：同一时刻 supervisor/worker PID `94440/102176/67860` 均存活；2026-09-01 10:28:42 +08:00 已有 62,702 / 572,951 条（10.943693%），3,679,413,298 字节。
+
+### E30b：可重试 Git 获取成功与环境安装器
+
+- 服务器按 E30a 修正方案首次尝试即成功：主仓库 shallow fetch/checkout 得到 `3b922afb33be44719000f2d14b8d9fa5c45ac592`；StreamVoiceAnon submodule 首次获取成功并固定为 `201705182c045298225071481e7cd59d537e935e`。Linux 多 GPU runner 的 executable bit 已在服务器核验为 `-rwxrwxr-x`。
+- 新增持久化环境安装器 `scripts/setup_linux_server_env.sh`：目标 venv `/public/home/wwwyyycom123_/venvs/mmsv`；PyTorch/torchvision/torchaudio 从官方 cu128 index 以 10 次重试和 120 秒 timeout 安装，其余依赖固定为本机成功版本。脚本随后运行全工程 pytest、StreamVoice `InferenceWrapper` import，并写 `results/runs/server_setup/environment.json`。
+- 安装器验收条件：Python 3.10–3.12、`torch==2.9.1+cu128`、`torchaudio==2.9.1+cu128`、CUDA available、恰好 2 张 GPU；audit 记录完成时间、hostname、platform、venv、关键版本、GPU 名称/显存与 Git HEAD。任何条件不满足均非零退出。
+- 实现提交：`7bc526a3cba219405ce17e9212fd5b9b0f58b490`（`feat: add reproducible Linux environment setup`）；Bash 语法检查、全部 `25 passed` 和 `git diff --check` 通过。
+- 文件指纹：`scripts\setup_linux_server_env.sh` 3,760 字节，SHA-256 `4a15198716fd3bedafca464f2343d2e4f4dfc6583c3e9aab2dc35b3c2314639e`；更新后的 `SERVER_MIGRATION.md` 7,674 字节，SHA-256 `ea197579e80f0882de5f7994c7418e876de5b2170bdd2d149d306dab46918fd0`。
+- 本机任务仍未停止：2026-09-01 10:34:16 +08:00 已生成 62,842 / 572,951 条（10.968128%），3,687,267,801 字节。
