@@ -1513,3 +1513,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/anonymize_train_dual
 - 三个 TAR 全部重新执行 `tar -tf`，实际 FLAC 成员数与各自 audit 一致，重新计算的 SHA-256 也与生成时 audit 一致；TAR 合计 5,081,715,200 字节、85,166 个成员。
 - 本机输出为 `C:\mmsv_transfer\mmsv_08_anonymized_train_checkpoint_20260902.part001-of-003.tar` 至 `part003-of-003.tar`。LF 汇总清单为 `C:\mmsv_transfer\mmsv_08_anonymized_train_checkpoint_20260902.all.sha256`，清单 SHA-256 `6cb6876cb03597427823297de41cc5b4109ead3954340761e79d0aa757dbea6f`。完成后 C 盘可用 46,842,314,752 字节。
 - 当前状态：本机断点已经固定且停止增长，3 个 train TAR 等待上传、服务器逐字节校验、解包及 85,166 条计数验收；这些步骤完成前不启动服务器正式 supervisor。
+
+### E30s：train 断点服务器验收与双 GPU 正式接管
+
+- 服务器验收：LF 汇总清单 SHA-256 为 `6cb6876cb03597427823297de41cc5b4109ead3954340761e79d0aa757dbea6f`；3 个 train TAR 的 `sha256sum -c` 均返回 `OK`，统计为 `OK count=3`、`FAILED count=0`。解包后 `/public/home/wwwyyycom123_/multimodal_sv_reproduction/artifacts/anonymized/train` 精确为 85,166 个 FLAC、5,016,359,466 字节，并输出 `train_checkpoint_transfer_verified=true`。
+- 正式启动时间：2026-09-02 05:14:09 +00:00（北京时间 13:14:09 +08:00）。项目根目录 `/public/home/wwwyyycom123_/multimodal_sv_reproduction`；正式 run 目录 `results/runs/anonymization_train/multigpu_20260902_051358_254`；总 supervisor 日志 `results/runs/anonymization_train/server_supervisor.log`。
+- 持久方式为 `nohup`：launcher PID `1515`，流水线脚本 PID `1519`。配置 `GPU_IDS=0,1`、`WORKERS_PER_GPU=4`、`MONITOR_SECONDS=60`，共 8 个 StreamVoiceAnon worker；worker PID 依次为 `1534/1536/1538/1540/1542/1544/1546/1548`。
+- 8 个连续切片为：start `0/71619/143238/214857/286476/358095/429714/501333`，limit 前 7 个均为 `71619`、末个为 `71618`；合计恰好覆盖 572,951 行，无间隙或重叠。启动时检测到已有输出 5,016,359,466 字节，预计完整输出 35,828,004,345 字节；文件系统可用 13,095,488,454,656 字节，空间保护通过。
+- 启动约 2 分 28 秒后的健康快照：8/8 worker 存活；输出增长到 85,297 个 FLAC、5,023,342,059 字节，即已生成 131 个新文件，而非仅扫描/跳过迁移断点。两张 RTX 4090 D 利用率均为 99%，GPU 0/1 显存分别为 10,182/10,808 MiB，温度 43/45°C，功耗 97.95/104.09 W。
+- 8 份 worker stderr 均为 StreamVoiceAnon 正常帧级进度条，推理速率约 10.6–11.2 frame iterations/s；未见 `Traceback`、CUDA OOM、device-side assert 或 supervisor `worker_failed`。结论：服务器已真实接管剩余全 utterance 匿名化，当前配置健康运行。
