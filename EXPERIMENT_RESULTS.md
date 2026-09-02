@@ -1529,3 +1529,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/anonymize_train_dual
 - 修正后的终止顺序为先冻结并结束 supervisor、再终止剩余 worker。最终检查中 supervisor 数组为空、worker 数组为空、相关进程列表为空；GPU 0/1 利用率均为 0%，显存均为 1 MiB，确认服务器端不再存在匿名化写入进程。
 - 静态断点计数为 115,207 / 572,951（20.107653%），剩余 457,744 条，文件字节合计 6,775,440,619。相比服务器启动时 85,166 条断点，本次 2-GPU 运行实际新增 30,041 条；扩容前仍需对 115,207 个 FLAC 执行完整可解码性/格式验证。
 - 扩容前完整验证随后通过：使用服务器虚拟环境中的 SoundFile 顺序读取全部 115,207 个 FLAC，并检查非空、16 kHz、单声道和正帧数；每 10,000 条报告一次进度，最终 `checked_total=115207`、`bad_count=0`。因此强制结束调度进程及 worker 没有留下可检测的截断或损坏文件，该静态目录可作为增加 GPU 后的正式恢复断点。
+
+### E30u：4-GPU 扩容与 16-worker 恢复
+
+- 新实例资源核验：`nvidia-smi -L` 显示 4 张 NVIDIA GeForce RTX 4090 D，PyTorch 返回 `cuda_available=true`、`gpu_count=4`；共享 NFS 项目目录仍为 `/public/home/wwwyyycom123_/multimodal_sv_reproduction`，扩容前验证过的 115,207 个 FLAC 均可见。
+- 16-slice dry run 于 2026-09-02 13:16:39 +00:00 通过，配置 `GPU_IDS=0,1,2,3`、`WORKERS_PER_GPU=4`；切片 start 为 `0/35810/71620/107430/143240/179050/214860/250670/286479/322288/358097/393906/429715/465524/501333/537142`，前 7 个 limit 为 35,810、后 9 个为 35,809，合计覆盖 572,951 行。dry-run 日志为 `results/runs/anonymization_train/server_4gpu_dry_run.log`。
+- 正式恢复时间：2026-09-02 13:16:55 +00:00；launcher PID `230`，run 目录 `results/runs/anonymization_train/multigpu_20260902_131639_788`，supervisor 日志 `/public/home/wwwyyycom123_/multimodal_sv_reproduction/results/runs/anonymization_train/server_supervisor_4gpu_20260902_131639.log`，对应 nohup 日志为同目录的 `server_nohup_4gpu_20260902_131639.log`。启动时已有输出 6,775,440,619 字节，文件系统可用 13,066,481,696,768 字节。
+- 16 个初始 worker PID 为 `248/250/252/254/256/258/260/262/264/266/268/270/272/274/276/278`，每张 GPU 分配 4 个。13:18:55 快照中四张卡利用率均为 99%，显存约 9,534/9,974/9,876/10,602 MiB；随后观测为 7,996/10,184/10,622/10,912 MiB，温度 42/46/44/44°C，功耗 102.49/108.07/117.05/114.67 W。
+- worker 1 于 13:19:21 在 attempt 1 正常完成：其 0–35,809 切片已全部存在有效断点，因此活跃 worker 数从 16 降为 15，属于正常完成而非进程丢失。failure scan 对 `worker_failed/Traceback/CUDA out of memory/device-side assert/Killed` 无命中；输出增长至 115,361 / 572,951（20.134532%），剩余 457,590，确认四卡恢复已开始生成新音频。
