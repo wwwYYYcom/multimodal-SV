@@ -1496,3 +1496,20 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/anonymize_train_dual
 - TAR 合计 5,651,291,648 字节。LF 格式汇总清单为 `C:\mmsv_transfer\mmsv_07_anonymized_evaluation_20260902.all.sha256`，SHA-256 `366e16b9757e16483daab2efcbd1fb925639ec842addb7fff05bd51adec77eb1`。三个 TAR 文件名为同目录下的 `mmsv_07_anonymized_evaluation_20260902.part001-of-003.tar` 至 `part003-of-003.tar`。
 - 本机正式任务未因打包而停止：01:07:56 +08:00 时 supervisor/worker PID `94440/102176/67860` 均存活；train 匿名输出为 84,761 / 572,951（14.793761%）、4,991,474,297 字节。C 盘在全部 evaluation TAR 与清单生成后可用 28,179,628,032 字节。
 - 当前迁移状态：evaluation 包已在本机生成并全量复核，等待上传到服务器、执行 3/3 `sha256sum -c`、解包并复核 86,222 个 FLAC；在服务器完成这些验收及最新 train 断点包迁移前，本机 supervisor 不停止。
+
+### E30r：本机 train 断点固定、验证与迁移分片
+
+- 切换检查时间：2026-09-02 11:36:50 +08:00。原 supervisor PID `94440` 与 worker PID `102176/67860` 均已不存在，系统中也没有其他包含 `anonymize_train`、`mmsv ... anonymize` 或 `StreamVoiceAnon` 命令行的正式进程，因此没有再向旧 PID 发送停止信号。
+- 最后 supervisor 进度日志时间为 2026-09-02 01:23:46 +08:00；末次报告 worker 1/2 为 43,363/301,378 与 41,802/271,573。supervisor stderr 仍为 0 字节，两个 worker 的日志末尾均处在正常推理进度中且没有 Python traceback。可确认任务在该时刻附近被外部会话或系统终止，但现有证据不能进一步断定具体外部原因。
+- 静态输出目录 `artifacts\anonymized\train` 共 85,166 个 FLAC、5,016,359,466 字节（14.864447%）。它比 supervisor 最后报告的 85,165 多 1 条：包含此前单独修复并生成、且属于正式全量 plan 的长样本。打包前使用 `D:\codeAPP\anaconda3\envs\pytorch\python.exe` 和 SoundFile 逐个读取全部 85,166 个文件头；全部为可解码的 16 kHz 单声道、正帧数输出，坏文件数为 0，总帧数 4,792,278,960。
+- 断点包完成时间：2026-09-02 11:41:52 +08:00。输入只包含验证后的 `artifacts\anonymized\train`，服务器解包根目录为 `/public/home/wwwyyycom123_/multimodal_sv_reproduction`。
+
+| Part | FLAC 数 | TAR 字节 | TAR SHA-256 | 首/末成员 |
+|---:|---:|---:|---|---|
+| 1/3 | 32,791 | 1,925,086,208 | `0524af2d2048dde4b566e311821562580a801fff798c0a1c96698ee10143c152` | `10038/fe_03_03111_A_0001.flac` → `4358/fe_03_00256_A_0073.flac` |
+| 2/3 | 31,485 | 1,924,141,568 | `976b8b7cb2bd49d4d5a0f1a2d944f6758b97fa7368bd471de6631787881bb8a4` | `4358/fe_03_00256_A_0074.flac` → `77997/fe_03_03370_A_0096.flac` |
+| 3/3 | 20,890 | 1,232,487,424 | `41ba0e2f6caa13565ee5277b2acda9590ec36bf246f4b0f42c0e20097111d8d8` | `77997/fe_03_03370_A_0097.flac` → `9999/fe_03_00009_B_0068.flac` |
+
+- 三个 TAR 全部重新执行 `tar -tf`，实际 FLAC 成员数与各自 audit 一致，重新计算的 SHA-256 也与生成时 audit 一致；TAR 合计 5,081,715,200 字节、85,166 个成员。
+- 本机输出为 `C:\mmsv_transfer\mmsv_08_anonymized_train_checkpoint_20260902.part001-of-003.tar` 至 `part003-of-003.tar`。LF 汇总清单为 `C:\mmsv_transfer\mmsv_08_anonymized_train_checkpoint_20260902.all.sha256`，清单 SHA-256 `6cb6876cb03597427823297de41cc5b4109ead3954340761e79d0aa757dbea6f`。完成后 C 盘可用 46,842,314,752 字节。
+- 当前状态：本机断点已经固定且停止增长，3 个 train TAR 等待上传、服务器逐字节校验、解包及 85,166 条计数验收；这些步骤完成前不启动服务器正式 supervisor。
