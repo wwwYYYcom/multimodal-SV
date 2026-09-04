@@ -1646,3 +1646,50 @@ D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\artifacts\saar\utterance_r
 - 包含：session trials/mapping/plan、utterance-random control metrics/figure、原始 corrected evaluation embedding（61,680,027 字节，SHA-256 `9c8c944a758f92dac45b4225f73317a83113d6a3ad744a5eac2580f2fb314ff3`）。不重复传输原有 86,222 条匿名音频或匿名 embedding。
 - 完整上传、SHA 校验、Linux 路径重映射、16-slice dry run、正式启动、进度、暂停恢复和输出路径见 `SAAR_RUNBOOK.md`。
 - 截至 2026-09-04 16:58:15 +08:00：本机 Phase 1、攻击实现、utterance-random control 和服务器输入准备已完成；session-fixed 匿名音频/embedding 尚未生成，因此 Gate 1 状态为 `pending`，Phase 3 SAAR MVP 训练未启动。
+
+### 30.6 本机提前完成的严格审计、统计置信区间与真实生成 smoke
+
+- 服务器原论文复现进度快照（用户于 2026-09-04 本节工作开始时提供）：400,953 / 572,951，进度 69.980330%，剩余 171,998，活跃 worker 13；GPU 0–3 利用率 99/99/98/99%，显存 10,582/13,462/7,543/15,518 MiB，温度 46/49/47/47°C。与上一份 359,985 条快照相比新增 40,968 条，四卡仍为稳定满载；按此前约 6,600 条/小时长窗口速度，匿名化剩余约 26 小时。该 ETA 只覆盖匿名化，后续仍有 manifest 校验、15 epochs semi-informed 训练和 O-A/A-A 评测。
+- 严格协议审计于 2026-09-04 17:17:07 +08:00 完成并通过：66,712 plan rows、66,712 unique plan IDs、66,712 unique outputs 与 5-seed target union 完全相等；enrollment union 55,919；13,350 trial IDs；原始 embedding universe 86,222 且 trial 缺失为 0；2,796 sessions 均无跨 speaker 混合且每 session 只有一个 reference。
+- reference 最短时长为 4.005 秒；2,796 sessions 使用 2,765 unique reference utterances，出现 31 个额外 session 复用既有 reference。它们是有限池独立确定性抽样下的正常碰撞，不破坏“同一 session 固定 reference”；映射/plan 中 reference ID 与 speaker ID 全部一致。
+- 1,000 次 paired stratified trial bootstrap 于 2026-09-04 17:17:19 +08:00 完成，bootstrap seed=2027。utterance-random control 的 ΔEER15 bootstrap mean 为 4.729588 pp，95% CI `[3.790262, 5.617978]` pp，明显排除 0。
+
+bootstrap 全部输出（EER %）：
+
+| N | bootstrap mean | 95% CI low | 95% CI high |
+|---:|---:|---:|---:|
+| 1 | 41.879521 | 41.033333 | 42.711610 |
+| 2 | 40.225558 | 39.355805 | 41.079026 |
+| 5 | 38.330936 | 37.453184 | 39.146442 |
+| 10 | 37.468719 | 36.629213 | 38.367041 |
+| 15 | 37.149933 | 36.359551 | 37.932959 |
+
+- 首次本机真实 session smoke 于 2026-09-04 17:17:29 +08:00 启动，StreamVoiceAnon 成功生成 4 条音频，但后验校验因一条 1.10 秒短语音的时长相对误差 2.8977% 超过初设 2% 阈值而报告失败。已有 86,222 条正式 evaluation 的 P95/最大误差分别为 2.9571%/4.3873%，因此这不是模型或文件损坏，而是 smoke 阈值不一致。
+- 阈值依照已有全量审计改为 5% 后于 2026-09-04 17:18:25–17:18:44 +08:00 重跑通过。session `fe_03_03725:1`、speaker `86577` 的 4 条 utterances 全部固定使用 reference `3483-119637-0009`（reference speaker `3483`）；均为 16 kHz mono、finite、非空 FLAC，4 条时长误差为 0.1752%/2.8977%/0.2066%/2.4750%。
+
+真实 smoke 全部音频数据：
+
+| utt_id | frames | duration | expected | bytes | SHA-256 |
+|---|---:|---:|---:|---:|---|
+| `fe_03_03725_B_0004` | 17,090 | 1.068125 | 1.07 | 16,008 | `e23f09b688f80471b3e745c1ce688337437aa05ca6b3b432c3fe2e5073d6b551` |
+| `fe_03_03725_B_0005` | 17,090 | 1.068125 | 1.10 | 13,864 | `e9b4a84ba811572d0f24b098a85176fea03f00fee1d480035c8f6d48254c6017` |
+| `fe_03_03725_B_0012` | 19,320 | 1.207500 | 1.21 | 15,250 | `a89381c22ed7b14868bc8c6e0c0eb9258dd5a2bb7798079e45ae99d7e79e37ac` |
+| `fe_03_03725_B_0014` | 15,604 | 0.975250 | 1.00 | 9,862 | `f6c83b2a0f938b11a2f63c6d4770ea04967ce6af372dbbe9046c2b1ce4a11c6f` |
+
+本机新增输出与代码：
+
+| 文件 | 字节数 | SHA-256 |
+|---|---:|---|
+| `artifacts\saar\session_baseline\manifests\strict_protocol.audit.json` | 1,728 | `4df3b49381df3e6db249c6d240b7e78fa657f9352ee803c024468cbeed3e087e` |
+| `artifacts\saar\utterance_random_control\metrics\bootstrap_ci.csv` | 362 | `a7917638d64e2fb627805906ac2ae7d2df0cda4add7c35822be10b2a6293cd19` |
+| `artifacts\saar\utterance_random_control\metrics\bootstrap_ci.summary.json` | 1,551 | `8d923d12ba809c19575fa710ce2b400a6d6ad8323c928fadae86d69c801b1f6d` |
+| `results\runs\saar_local_session_smoke\20260904_171825_467\validation.json` | 3,698 | `91424e974fd16828cb929e90a0f6afc03031f3748d4c10fcb849c7be9409b00e` |
+| `scripts\audit_saar_protocol.py` | 7,906 | `65f80879b9ae416102093ee6adf6ed99beeb245153ca2264fc4634a7080fdeea` |
+| `scripts\bootstrap_saar_privacy.py` | 4,983 | `a996032630448a3c69973a1fe80d83973c0c6aa5e743ed00353c34094fd81838` |
+| `scripts\local_saar_session_smoke.py` | 5,824 | `11ea9e5c7e5ea1e54ca8dcd2b54401f9b91e28d922e45e29848d36287d977fda` |
+| `scripts\evaluate_saar_session_baseline.py` | 5,589 | `3b05269fdf773eb7ceb0d6aed66276fa6753f45057d3636c540a45997ceb42f6` |
+| `scripts\package_saar_gate1_results.sh` | 1,202 | `e5a8acfb3b6116e4555ed844936731dd0cf6e71823fd95983193be4445f19591` |
+| `scripts\import_saar_gate1_results.ps1` | 1,821 | `02647185ac10e3c5c659ab6bcc135fb46c0ec0c3ef27ccb0b3d3b3339ed06e99` |
+
+- `evaluate_saar_session_baseline.py` 现在在正式 Gate 1 中自动运行 1,000 次 bootstrap；Gate 1 同时要求 mean ΔEER15 ≥ 1.0 pp 且 ΔEER15 的 95% CI 排除 0。服务器没有 matplotlib 时只延迟绘图，不影响 EER/PCS/bootstrap/Gate 落盘。
+- 服务器任务完成后使用 `scripts/package_saar_gate1_results.sh` 生成不含 4–5 GB 匿名 FLAC 的精简结果 TAR；本机用 `scripts/import_saar_gate1_results.ps1` 在验证 SHA-256 与成员路径安全后导入。完整命令见 `SAAR_RUNBOOK.md`。

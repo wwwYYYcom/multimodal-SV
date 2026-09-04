@@ -111,11 +111,35 @@ watch -n 60 'COUNT=$(find artifacts/saar/anonymized/session_baseline_evaluation 
 ```text
 artifacts/saar/session_baseline/metrics/gate_1.json
 artifacts/saar/session_baseline/metrics/privacy_summary.csv
+artifacts/saar/session_baseline/metrics/bootstrap_ci.csv
 artifacts/saar/session_baseline/metrics/pcs_summary.csv
 artifacts/saar/session_baseline/figures/eer_vs_n.png
 artifacts/saar/session_baseline/evaluation_summary.json
 results/runs/saar_session_baseline/final.validation.json
 ```
 
-本工程把 5-seed mean `EER(N=1)-EER(N=15) >= 1.0` 个百分点定义为 Gate 1
-“有意义下降”的可执行阈值。通过后才进入 SAAR MVP 训练；失败时先复核协议或修订假设。
+本工程把 5-seed mean `EER(N=1)-EER(N=15) >= 1.0` 个百分点，且 1,000 次
+paired stratified bootstrap 的 95% CI 排除 0，共同定义为 Gate 1“有意义下降”的
+可执行阈值。通过后才进入 SAAR MVP 训练；失败时先复核协议或修订假设。
+
+## 结果回传到本机
+
+服务器 Gate 1 完成后生成不含约 4–5 GB 匿名 FLAC 的精简结果包：
+
+```bash
+cd "$MMSV_HOME"
+PROJECT_ROOT="$MMSV_HOME" \
+OUTPUT_DIR=/public/home/wwwyyycom123_ \
+bash scripts/package_saar_gate1_results.sh
+```
+
+把输出的 TAR 和同名 `.sha256` 下载到本机，然后执行：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File scripts\import_saar_gate1_results.ps1 `
+  -Archive 'D:\download4browser\mmsv_saar_gate1_results_<timestamp>.tar'
+```
+
+导入器会先核对 SHA-256、拒绝绝对路径和 `..` 路径成员，再解包到项目。随后将最终
+Gate 1、全部 EER/PCS/bootstrap 数据、服务器完成时间和文件指纹追加到唯一实验总账。

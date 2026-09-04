@@ -5,6 +5,7 @@ import json
 import subprocess
 from pathlib import Path
 
+from bootstrap_saar_privacy import bootstrap_privacy
 from mmsv.metrics import (
     compute_pcs,
     load_embeddings,
@@ -31,6 +32,8 @@ def main() -> None:
     parser.add_argument("--output-root", required=True, type=Path)
     parser.add_argument("--control-summary", type=Path)
     parser.add_argument("--gate-min-delta-eer15-pp", type=float, default=1.0)
+    parser.add_argument("--bootstrap-replicates", type=int, default=1000)
+    parser.add_argument("--bootstrap-seed", type=int, default=2027)
     args = parser.parse_args()
 
     project_root = Path(__file__).resolve().parents[1]
@@ -74,19 +77,40 @@ def main() -> None:
         anonymized,
         metric_root / "pcs_summary.csv",
     )
+    bootstrap = bootstrap_privacy(
+        score_root,
+        metric_root / "bootstrap_ci.csv",
+        seeds=seeds,
+        n_values=n_values,
+        replicates=args.bootstrap_replicates,
+        bootstrap_seed=args.bootstrap_seed,
+    )
 
     per_n = {int(row["n"]): row for row in summary["per_n"]}
     delta_eer15_pp = (
         float(per_n[1]["eer_mean"]) - float(per_n[15]["eer_mean"])
     ) * 100.0
-    gate_passed = delta_eer15_pp >= args.gate_min_delta_eer15_pp
+    ci_excludes_zero = (
+        float(bootstrap["delta_eer15_ci95_low_percentage_points"]) > 0.0
+    )
+    gate_passed = (
+        delta_eer15_pp >= args.gate_min_delta_eer15_pp and ci_excludes_zero
+    )
     gate = {
         "gate": "Gate 1: aggregation vulnerability exists before SAAR training",
         "criterion": (
             "mean O-A EER(N=1) - mean O-A EER(N=15) >= "
-            f"{args.gate_min_delta_eer15_pp:.6f} percentage points"
+            f"{args.gate_min_delta_eer15_pp:.6f} percentage points and paired "
+            "stratified-bootstrap 95% CI excludes zero"
         ),
         "delta_eer15_percentage_points": delta_eer15_pp,
+        "delta_eer15_ci95_low_percentage_points": bootstrap[
+            "delta_eer15_ci95_low_percentage_points"
+        ],
+        "delta_eer15_ci95_high_percentage_points": bootstrap[
+            "delta_eer15_ci95_high_percentage_points"
+        ],
+        "bootstrap_ci_excludes_zero": ci_excludes_zero,
         "passed": gate_passed,
         "next_action": (
             "proceed_to_saar_mvp_training"
@@ -121,6 +145,7 @@ def main() -> None:
         "git_commit": git_commit,
         "privacy": summary,
         "pcs": pcs,
+        "bootstrap": bootstrap,
         "gate_1": gate,
         "plot": plot,
     }
