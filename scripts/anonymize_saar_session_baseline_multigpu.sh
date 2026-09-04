@@ -61,8 +61,10 @@ for row in rows:
 print("saar_plan_preflight=true")
 PY
 
-if [[ "$DRY_RUN" != "1" && "$ALLOW_CONCURRENT_GPU_JOB" != "1" ]] && \
-   pgrep -f '[m]msv.cli (anonymize-streamvoice|train-audio|extract-embeddings)' >/dev/null; then
+if [[ "$DRY_RUN" != "1" && "$ALLOW_CONCURRENT_GPU_JOB" != "1" ]] && {
+   pgrep -f '[m]msv.cli (anonymize-streamvoice|train-audio|extract-embeddings)' >/dev/null ||
+   pgrep -f '[a]nonymize_train_multigpu_then_train_semi.sh' >/dev/null
+}; then
     echo "another MMSV GPU job is active; refusing GPU contention" >&2
     echo "wait for the original reproduction, or explicitly set ALLOW_CONCURRENT_GPU_JOB=1" >&2
     exit 2

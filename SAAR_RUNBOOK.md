@@ -21,7 +21,8 @@ LibriSpeech `train-clean-360` 的数据边界。
 - 计算 5 seeds × 5 个 N 的 O-A EER、PCS 和 Gate 1。
 
 原论文复现流水线与 SAAR 使用不同的输出目录。SAAR runner 默认检测并拒绝与任何
-仍在运行的 `anonymize-streamvoice`、`train-audio` 或 `extract-embeddings` 任务争抢 GPU。
+仍在运行的原论文复现 supervisor、`anonymize-streamvoice`、`train-audio` 或
+`extract-embeddings` 任务争抢 GPU。
 
 ## 输入包
 

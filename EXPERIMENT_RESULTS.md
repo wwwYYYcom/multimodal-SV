@@ -1549,7 +1549,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/anonymize_train_dual
 - Fisher 一通电话有两位说话人，因此文档中的 session 概念在本工程落实为 `call_id + channel`，不能只用 `call_id`；否则同一通电话的 A/B 双方会错误共享伪说话人。
 - 原有 `artifacts/trials/evaluation.jsonl` 会把 target utterance 跨 call 组合，不符合“同一 session 内 N 增长”的 SAAR 攻击协议；本实验新建固定 original enrollment、单 session anonymous target、call-disjoint、nested `N={1,2,5,10,15}` 的 5-seed trials。
 - 为复用已经完成的 86,222 条 corrected evaluation embeddings 并保证对照使用完全相同的 utterance universe，协议限定在 `artifacts/embeddings/original_evaluation_corrected.npz` 中已有的 utterance ID。该限制使合格 evaluation speakers 从旧协议的 1,606 变为 1,335，属于明确记录的工程修订，不冒充完整 Fisher Part 1 evaluation universe。
-- 本机负责协议、计划、对照评测、PCS、绘图、测试和传输包；四卡服务器只负责新 session-fixed 匿名化、匿名 embedding 与 Gate 1。SAAR runner 的输出目录与正在运行的 572,951 条原论文复现任务完全分离，并在检测到已有 `anonymize-streamvoice`、`train-audio` 或 `extract-embeddings` 进程时默认拒绝启动，避免 GPU 争抢。
+- 本机负责协议、计划、对照评测、PCS、绘图、测试和传输包；四卡服务器只负责新 session-fixed 匿名化、匿名 embedding 与 Gate 1。SAAR runner 的输出目录与正在运行的 572,951 条原论文复现任务完全分离，并在检测到原论文复现 supervisor、`anonymize-streamvoice`、`train-audio` 或 `extract-embeddings` 进程时默认拒绝启动，避免 GPU 争抢。
 
 ### 30.2 Phase 1：session-fixed mapping 与评测集合
 
@@ -1631,7 +1631,7 @@ D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\artifacts\saar\utterance_r
 | `src\mmsv\cli.py` | 16,547 | `c0a1758eaa15225260205700284b5ffdffe6f2dbedda382eb0c320b669da8cab` |
 | `scripts\evaluate_saar_session_baseline.py` | 4,604 | `c9abf4dbac9b16c5f83d13189ab70662e28fb34ff19f3ea8df9378ec0698e251` |
 | `scripts\remap_saar_artifacts_for_linux.sh` | 1,695 | `6f0e18ebc132e9795e5f538e090c4af8bbdaca5212e11e34c326dfcf10e9596b` |
-| `scripts\anonymize_saar_session_baseline_multigpu.sh` | 9,505 | `d82976e27b1da4b23a540cf910061c7ec468027bba67b4082b1f94580ec4cc19` |
+| `scripts\anonymize_saar_session_baseline_multigpu.sh` | 9,581 | `16b35d8c373aa661f69723ebd8bd7150b96d6ec643cceed7e1ae05f660a5d392` |
 | `scripts\create_saar_phase12_transfer_pack.ps1` | 1,363 | `18ca9151ee891c39c02915494c525893eb49ccda5be1d0e1f8079e4ae982d0ce` |
 | `scripts\merge_anonymization_manifests.py` | 4,602 | `5723a3d4f16e57920453b356b0561c1238524eaff142de204bc028f79610d946` |
 | `tests\test_saar_protocol.py` | 7,072 | `d3be0be55643aa743476af4ccaee6b5a610e699041db821a2ce25095fd415a8e` |
