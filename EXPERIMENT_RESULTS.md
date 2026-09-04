@@ -1539,3 +1539,110 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/anonymize_train_dual
 - worker 1 于 13:19:21 在 attempt 1 正常完成：其 0–35,809 切片已全部存在有效断点，因此活跃 worker 数从 16 降为 15，属于正常完成而非进程丢失。failure scan 对 `worker_failed/Traceback/CUDA out of memory/device-side assert/Killed` 无命中；输出增长至 115,361 / 572,951（20.134532%），剩余 457,590，确认四卡恢复已开始生成新音频。
 - 2026-09-02 15:36:50 +00:00 稳态快照：输出 131,759 / 572,951（22.996556%），剩余 441,192，活跃 worker 仍为 15；GPU 0–3 利用率均为 99%，显存分别为 10,104/12,788/13,024/13,312 MiB，温度 47/50/48/48°C。相对 4-GPU 启动前静态断点新增 16,552 条，经过 8,395 秒，平均约 1.97165 条/秒或 7,097.9 条/小时；若后续语音长度分布和并行度保持相近，匿名化剩余约 62.2 小时，点估计完成时间为 2026-09-05 05:47 +00:00（北京时间 13:47），合理波动范围约 2.5–3.5 天。
 - 2026-09-04 10:15:29 +08:00 接收的监控快照：输出 359,985 / 572,951（62.829980%），剩余 212,966，活跃 worker 为 13；GPU 0–3 利用率为 99/99/97/99%，显存 10,582/13,462/7,543/15,518 MiB，温度 46/50/47/48°C。相对 4-GPU 启动前断点共新增 244,778 条，按约 36.98 小时长窗口计算平均约 6,619 条/小时；按该长窗口吞吐，剩余匿名化约 32.2 小时，点估计为 2026-09-05 18:25 +08:00。13 个 worker 是否均因切片完成而减少仍以 supervisor 的 `worker_completed/worker_failed` 日志核查为准，但四张 GPU 均持续高利用且温度正常。
+
+## 30. E31：SAAR Phase 1/2 协议实现、本机对照与服务器输入准备
+
+### 30.1 请求、范围与对方案的必要修订
+
+- 用户请求：按照 `D:\download4browser\SAAR_Codex_Experiment_Plan.docx` 实施 SAAR，可根据已经完成的实验做小改动，并允许一部分任务在本机完成。
+- 数据边界保持不变：只使用 Fisher Part 1 和 LibriSpeech `train-clean-360`，不引入 `train-other-500`。
+- Fisher 一通电话有两位说话人，因此文档中的 session 概念在本工程落实为 `call_id + channel`，不能只用 `call_id`；否则同一通电话的 A/B 双方会错误共享伪说话人。
+- 原有 `artifacts/trials/evaluation.jsonl` 会把 target utterance 跨 call 组合，不符合“同一 session 内 N 增长”的 SAAR 攻击协议；本实验新建固定 original enrollment、单 session anonymous target、call-disjoint、nested `N={1,2,5,10,15}` 的 5-seed trials。
+- 为复用已经完成的 86,222 条 corrected evaluation embeddings 并保证对照使用完全相同的 utterance universe，协议限定在 `artifacts/embeddings/original_evaluation_corrected.npz` 中已有的 utterance ID。该限制使合格 evaluation speakers 从旧协议的 1,606 变为 1,335，属于明确记录的工程修订，不冒充完整 Fisher Part 1 evaluation universe。
+- 本机负责协议、计划、对照评测、PCS、绘图、测试和传输包；四卡服务器只负责新 session-fixed 匿名化、匿名 embedding 与 Gate 1。SAAR runner 的输出目录与正在运行的 572,951 条原论文复现任务完全分离，并在检测到已有 `anonymize-streamvoice`、`train-audio` 或 `extract-embeddings` 进程时默认拒绝启动，避免 GPU 争抢。
+
+### 30.2 Phase 1：session-fixed mapping 与评测集合
+
+- 完成时间：trials 生成/复核完成于 2026-09-04 16:44:07 +08:00；匿名化 plan 生成/复核完成于 2026-09-04 16:44:13 +08:00。
+- split：evaluation；合格 speakers 1,335；每个 seed 产生 1,335 target + 1,335 non-target = 2,670 trials，5 seeds 合计 13,350 trial records。
+- enrollment 固定为同一 speaker、同一 call-side session 的 15 条 original utterances；target 固定为一个与 enrollment call-disjoint 的 call-side session，并对一次采样的前缀取 N=1/2/5/10/15。
+- 五个 sampling seeds 为 `1/2/3/4/5`；伪说话人 mapping seed 为 `2027`。
+- session-fixed 匿名化并集为 66,712 条 target utterances、72.839094 source hours、2,796 个 session keys；每个 session 的所有 utterances 固定使用同一条 LibriSpeech reference。
+- reference pool 为 99,278 条 `train-clean-360`、长度大于 4 秒的语音；2,796 个 session 映射选择了 2,765 条 unique reference utterances。不同 session 允许独立随机映射后偶然选中同一 reference。
+- StreamVoiceAnon 参数固定为 `delay=2 frames`、`alpha=1.0`，输出计划目录为 `D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\artifacts\saar\anonymized\session_baseline_evaluation`。
+
+关键计划产物：
+
+| 文件 | 字节数 | SHA-256 |
+|---|---:|---|
+| `artifacts\saar\session_baseline\manifests\session_trials.audit.json` | 2,218 | `faeafad8dc40a07ee9721799638e5fbdca13a2111198393635ff2a9c8d15445a` |
+| `artifacts\saar\session_baseline\manifests\all_seeds.jsonl` | 12,950,662 | 见输入 TAR 的整体 SHA；逐 seed 原始 trial 文件保留在同目录 |
+| `artifacts\saar\session_baseline\manifests\session_baseline_anonymization_plan.csv` | 44,340,056 | `4e3a403b66c98bb0869370f051d32ff5baf2eec98a2cbddc2ba7dbe4963466bc` |
+| `artifacts\saar\session_baseline\manifests\session_baseline_anonymization_plan.audit.json` | 1,234 | `f5b5f072ae8ddab9b38605c768872c06a3b6d614c5eab16e7b84443840267830` |
+| `artifacts\saar\session_baseline\manifests\pseudo_mapping.json` | 1,120,070 | `de299b7abfd8518a757d46c631a5d9fec88b6f4939b71993f6c72c683ee9f587` |
+
+### 30.3 Phase 2 本机对照：已有 utterance-random 匿名化
+
+- 完成时间：隐私曲线汇总 2026-09-04 16:45:11 +08:00；PCS 2026-09-04 16:45:21 +08:00；曲线图 2026-09-04 16:47:32 +08:00。
+- 该对照直接复用原有 86,222 条 per-utterance random reference 的匿名 embedding；它不是 session-fixed baseline，也不是 SAAR 输出。
+- 攻击条件：fixed original enrollment / increasing anonymous target，lazy-informed corrected WavLM-ECAPA mean attacker；每格 1,335 target + 1,335 non-target。
+
+全部 5-seed EER 数据（%）：
+
+| seed | N=1 | N=2 | N=5 | N=10 | N=15 | slope β（fraction/log2 N） |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 41.947566 | 40.973783 | 38.876404 | 38.277154 | 37.153558 | -0.0121137865 |
+| 2 | 42.172285 | 39.850187 | 37.977528 | 37.752809 | 36.629213 | -0.0130677759 |
+| 3 | 41.198502 | 39.850187 | 38.052434 | 37.228464 | 37.602996 | -0.0100131785 |
+| 4 | 41.423221 | 39.625468 | 37.977528 | 36.779026 | 36.779026 | -0.0121861225 |
+| 5 | 42.771536 | 40.973783 | 38.576779 | 37.228464 | 37.453184 | -0.0145446459 |
+| mean | 41.902622 | 40.254682 | 38.292135 | 37.453184 | 37.123596 | -0.0123851019 |
+| seed std | 0.557738 | 0.592850 | 0.368186 | 0.514624 | 0.374831 | — |
+
+- mean ΔEER15 = EER1 − EER15 = 4.779026 个百分点；mean RD15 = 11.405077%；mean `|β|=0.0123851019` fraction/log2 N，即 1.23851019 个百分点/log2 N。
+- utterance-random PCS：2,796 sessions；mean pairwise cosine `0.3459139683`，session 间标准差 `0.0385364567`。
+- 这些结果证明新攻击/聚合实现会在旧 per-utterance random 对照上呈现预期的随 N 下降趋势，但不能替代 Gate 1；Gate 1 必须等待 66,712 条真正 session-fixed 音频及其 embedding。
+
+对照输出：
+
+| 文件 | 字节数 | SHA-256 |
+|---|---:|---|
+| `artifacts\saar\utterance_random_control\metrics\privacy_summary.csv` | 9,520 | `9f5a2918a17738db5f4df2447a61ee1723f732548ce2219e2fb9f58724975e60` |
+| `artifacts\saar\utterance_random_control\metrics\privacy_summary.summary.json` | 1,041 | `28401f43713d3f734fc9e4e244c0b92a3de0c277898923b2018992c2f74464b1` |
+| `artifacts\saar\utterance_random_control\metrics\pcs_summary.csv` | 104,561 | 逐 session 的全部 PCS 数据；保留在本机及输入 TAR |
+| `artifacts\saar\utterance_random_control\metrics\pcs_summary.metrics.json` | 312 | `061db809ce97c2a116704ae2a05960277b68ae278a19aacb992157307451e1a8` |
+| `artifacts\saar\utterance_random_control\figures\eer_vs_n.png` | 49,300 | `cc4d229d22960e7a7af1d6b1ea17735ca849e165b3751bb78e5933361cc116c1` |
+
+每个 seed/N 的逐 trial scores 和 metrics 位于：
+
+```text
+D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\artifacts\saar\utterance_random_control\scores\oa_mean_N{N}_seed{seed}.csv
+D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\artifacts\saar\utterance_random_control\scores\oa_mean_N{N}_seed{seed}.metrics.json
+```
+
+### 30.4 代码、测试与训练边界
+
+- 36 项 pytest 于 2026-09-04 16:54–16:55 +08:00 全部通过，包括：mapping determinism、speaker/session isolation、nested sampling、固定 enrollment、session manifest 合并、聚合向量归一化、growth loss、privacy encoder 冻结、梯度到匿名化器、PCS 与 5-seed 汇总。
+- `SessionBatchSampler` 每个 batch 从一个 speaker-session 取 K=4 utterances；`saar_losses.py` 已实现 `L_src`、`L_growth`、utterance/aggregate `L_pseudo` 及加权组合，损失单元的梯度测试已通过。
+- 现有 StreamVoiceAnon inference 通过 `torch.multinomial/argmax` 产生离散 codec index，且 `code2wav_fn`/inference wrapper 使用 `torch.no_grad()`；因此从 WavLM privacy loss 到 AR 匿名化器的真实端到端梯度目前被离散采样和 no-grad 解码截断。未用“只训练 ASV”伪装成 SAAR 训练。根据方案 Gate 1 约束，Phase 3 暂不启动；Gate 1 通过后需要明确实现 soft-code/straight-through surrogate 或其他可验证的可微训练接口。
+- 本工程为 Gate 1 增加可执行阈值：5-seed mean `EER(N=1)-EER(N=15) >= 1.0` 个百分点。服务器流水线只判定并落盘，不自动进入 Phase 3。
+
+运行代码指纹（本节提交前工作树内容）：
+
+| 文件 | 字节数 | SHA-256 |
+|---|---:|---|
+| `configs\saar_mvp.yaml` | 1,313 | `bbbea2e2c95f40718d21dad96ff23074d96c39cf125c104c93338a091d34cdec` |
+| `src\mmsv\data\session_trials.py` | 12,345 | `873740c4886fde5fc30770b9a4d5bbe323a79eb57c47a7b5756196d2ac232c25` |
+| `src\mmsv\data\session_batch.py` | 1,937 | `0d559bd3219a2c30c605c3b793e2684225067e125666546d6695da19dce1cb06` |
+| `src\mmsv\saar_losses.py` | 4,255 | `80fab769886e518137cd64c1cfe86a8b26704329aa1a4a6150c842e6e0f5ad29` |
+| `src\mmsv\metrics.py` | 14,517 | `f77ab5799d1dfd5b5243748e58c55f7e9e23b5d14140b54a04142eae8bd6d233` |
+| `src\mmsv\plotting.py` | 1,773 | `d35c325bd252d5496a8e3c67f5fd12155761a75d48e63ba528c939dfffd40e18` |
+| `src\mmsv\anonymization.py` | 18,367 | `864a2ed8c0a0e2a05763117c4ae8c057b1786d863a881f33c267e141692e169e` |
+| `src\mmsv\cli.py` | 16,547 | `c0a1758eaa15225260205700284b5ffdffe6f2dbedda382eb0c320b669da8cab` |
+| `scripts\evaluate_saar_session_baseline.py` | 4,604 | `c9abf4dbac9b16c5f83d13189ab70662e28fb34ff19f3ea8df9378ec0698e251` |
+| `scripts\remap_saar_artifacts_for_linux.sh` | 1,695 | `6f0e18ebc132e9795e5f538e090c4af8bbdaca5212e11e34c326dfcf10e9596b` |
+| `scripts\anonymize_saar_session_baseline_multigpu.sh` | 9,505 | `d82976e27b1da4b23a540cf910061c7ec468027bba67b4082b1f94580ec4cc19` |
+| `scripts\create_saar_phase12_transfer_pack.ps1` | 1,363 | `18ca9151ee891c39c02915494c525893eb49ccda5be1d0e1f8079e4ae982d0ce` |
+| `scripts\merge_anonymization_manifests.py` | 4,602 | `5723a3d4f16e57920453b356b0561c1238524eaff142de204bc028f79610d946` |
+| `tests\test_saar_protocol.py` | 7,072 | `d3be0be55643aa743476af4ccaee6b5a610e699041db821a2ce25095fd415a8e` |
+| `tests\test_saar_losses.py` | 2,578 | `1737687b570d00d89c648d68681a3f3cfbb66f71735a0ae2c18c02dee0d7c200` |
+| `tests\test_merge_session_manifests.py` | 2,169 | `221723694bb9222c93bc611beea210c200da080428bbfb7c205e2e8e9d86d496` |
+
+### 30.5 服务器传输包与下一状态
+
+- 输入包完成时间：2026-09-04 16:55:32 +08:00。
+- 文件：`D:\download4browser\mmsv_saar_phase12_inputs_20260904_165532.tar`。
+- 大小：133,223,936 字节；SHA-256：`e7b419ea9256830e22d083da8deb30d5b875d815e483ff37781d0edd7c92d2bd`；TAR 共 19 个目录/文件条目。
+- 包含：session trials/mapping/plan、utterance-random control metrics/figure、原始 corrected evaluation embedding（61,680,027 字节，SHA-256 `9c8c944a758f92dac45b4225f73317a83113d6a3ad744a5eac2580f2fb314ff3`）。不重复传输原有 86,222 条匿名音频或匿名 embedding。
+- 完整上传、SHA 校验、Linux 路径重映射、16-slice dry run、正式启动、进度、暂停恢复和输出路径见 `SAAR_RUNBOOK.md`。
+- 截至 2026-09-04 16:58:15 +08:00：本机 Phase 1、攻击实现、utterance-random control 和服务器输入准备已完成；session-fixed 匿名音频/embedding 尚未生成，因此 Gate 1 状态为 `pending`，Phase 3 SAAR MVP 训练未启动。

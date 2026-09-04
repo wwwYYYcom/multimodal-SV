@@ -131,6 +131,11 @@ evaluation StreamVoiceAnon 的 86,222 条匿名化已完成并通过最终校验
 
 双 RTX 4090 D Linux 服务器迁移使用 `scripts/remap_artifacts_for_linux.sh` 和 `scripts/anonymize_train_multigpu_then_train_semi.sh`；持久化目录、环境安装、数据传输、路径重写、8-worker dry run、正式启动和切换检查表见 [SERVER_MIGRATION.md](SERVER_MIGRATION.md)。本机任务在服务器 smoke 和最终增量同步完成前保持运行，不允许两个 supervisor 同时写同一共享输出目录。
 
+SAAR 扩展实验采用 session-aware 固定伪说话人、固定 original enrollment、匿名 target
+按 `N={1,2,5,10,15}` 增长且 5-seed nested sampling。Phase 1/2 的本机/服务器职责、
+输入包、断点续跑和 Gate 1 命令见 [SAAR_RUNBOOK.md](SAAR_RUNBOOK.md)；实验数据仍只在
+`EXPERIMENT_RESULTS.md` 追加，避免出现多个相互矛盾的结果总账。
+
 ## Git 版本管理
 
 主分支为 `main`，复现实验基线标签为 `v0.1.0-reproduction-baseline`。StreamVoiceAnon 使用 submodule 固定版本；clone 时应同时初始化 submodule：

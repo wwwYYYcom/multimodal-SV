@@ -1,0 +1,51 @@
+experiment:
+  name: saar_mvp
+  seed: 2027
+
+data:
+  dataset: fisher_part_1
+  reference_dataset: librispeech_train_clean_360
+  session_key: call_id_plus_channel
+  speaker_key: speaker_id
+  utterance_key: utt_id
+  utterances_per_session: 4
+  # Reuse the completed corrected evaluation embedding universe so the
+  # utterance-random control and session-fixed baseline share exact trials.
+  allowed_utterance_embeddings: artifacts/embeddings/original_evaluation_corrected.npz
+
+pseudo:
+  mode: session_fixed
+  mapping_file: artifacts/saar/session_baseline/manifests/pseudo_mapping.json
+  delay_frames: 2
+  alpha: 1.0
+
+privacy_encoder:
+  name: wavlm_large_ecapa
+  checkpoint: results/runs/audio_corrected_p1/last.pt
+  freeze: true
+
+aggregation:
+  type: mean
+  train_n: [1, 2, 4]
+
+loss:
+  lambda_src: 0.5
+  lambda_growth: 0.2
+  lambda_pseudo: 0.2
+  source_margin: 0.2
+  source_margin_policy: estimate_from_baseline_then_tune
+  growth_delta: 0.0
+  pseudo_aggregate_weight: 1.0
+
+eval:
+  protocol: fixed_original_enrollment_increasing_anonymized_target
+  enrollment_n: 15
+  n_list: [1, 2, 5, 10, 15]
+  seeds: [1, 2, 3, 4, 5]
+  attacker: lazy_informed_wavlm_ecapa_mean
+
+gates:
+  gate_1_requires_eer_decline: true
+  delta_eer15_relative_improvement_min: 0.30
+  eer1_max_absolute_difference: 0.02
+  pcs_max_relative_drop: 0.05

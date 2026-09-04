@@ -13,10 +13,18 @@ from .anonymization import anonymize_plan, build_anonymization_plan
 from .config import load_config, require_path
 from .data.fisher import build_manifest
 from .data.librispeech import build_librispeech_pool
+from .data.session_trials import build_session_trial_sets
 from .data.splits import split_speakers
 from .data.trials import build_trials, validate_trials
-from .metrics import load_embeddings, score_mean_trials
+from .metrics import (
+    compute_pcs,
+    load_embeddings,
+    score_mean_trials,
+    score_session_trials,
+    summarize_privacy_curve,
+)
 from .models import ECAPABackend
+from .plotting import plot_privacy_curves
 from .train import extract_embeddings, train_audio
 
 
@@ -84,6 +92,37 @@ def _score(args: argparse.Namespace) -> None:
     _print(score_mean_trials(args.trials, original, anonymized, args.condition, args.n, args.output))
 
 
+def _score_session(args: argparse.Namespace) -> None:
+    original = load_embeddings(args.original_embeddings)
+    anonymized = load_embeddings(args.anonymized_embeddings) if args.anonymized_embeddings else None
+    _print(score_session_trials(
+        args.trials, original, anonymized, args.condition, args.n, args.output
+    ))
+
+
+def _pcs(args: argparse.Namespace) -> None:
+    _print(compute_pcs(
+        args.trials,
+        load_embeddings(args.anonymized_embeddings),
+        args.output,
+    ))
+
+
+def _summarize_privacy(args: argparse.Namespace) -> None:
+    _print(summarize_privacy_curve(
+        args.metrics,
+        args.output,
+        system=args.system,
+        attacker=args.attacker,
+        checkpoint=args.checkpoint,
+        git_commit=args.git_commit,
+    ))
+
+
+def _plot_privacy(args: argparse.Namespace) -> None:
+    _print(plot_privacy_curves(args.input, args.output))
+
+
 def _model_smoke(_: argparse.Namespace) -> None:
     torch.manual_seed(7)
     backend = ECAPABackend(input_dim=16, channels=32, mfa_channels=64, embedding_dim=24)
@@ -115,7 +154,48 @@ def _plan_anonymization(args: argparse.Namespace) -> None:
         args.splits,
         args.split_name,
         args.one_per_call_side,
+        args.reference_mapping,
+        args.mapping_output,
+        args.trial_role,
     ))
+
+
+def _prepare_saar_baseline(args: argparse.Namespace) -> None:
+    config = load_config(args.config)
+    evaluation = config["eval"]
+    pseudo = config["pseudo"]
+    output_root = Path(args.output_root)
+    manifest_root = output_root / "manifests"
+    allowed_utterance_ids: set[str] | None = None
+    if args.allowed_embeddings:
+        archive = np.load(args.allowed_embeddings, allow_pickle=False)
+        allowed_utterance_ids = set(archive["utt_ids"].astype(str).tolist())
+    trial_audit = build_session_trial_sets(
+        args.manifest,
+        args.splits,
+        manifest_root,
+        args.split,
+        evaluation["n_list"],
+        int(evaluation["enrollment_n"]),
+        evaluation["seeds"],
+        allowed_utterance_ids,
+    )
+    plan_audit = build_anonymization_plan(
+        args.manifest,
+        args.reference_pool,
+        manifest_root / "session_baseline_anonymization_plan.csv",
+        args.audio_output_root,
+        int(config["experiment"]["seed"]),
+        manifest_root / "all_seeds.jsonl",
+        reference_mapping=str(pseudo["mode"]).replace("_fixed", ""),
+        mapping_output_json=manifest_root / "pseudo_mapping.json",
+        trial_role="target",
+    )
+    _print({
+        "phase": "SAAR Phase 1/2 preparation",
+        "trial_audit": trial_audit,
+        "anonymization_plan_audit": plan_audit,
+    })
 
 
 def _anonymize(args: argparse.Namespace) -> None:
@@ -205,6 +285,19 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="每个 call-side 确定性选择一条 source；用于磁盘受限的 semi-informed 训练",
     )
+    command.add_argument(
+        "--reference-mapping",
+        choices=["utterance", "session"],
+        default="utterance",
+        help="reference selection unit; session uses Fisher call_id+channel",
+    )
+    command.add_argument("--mapping-output", help="persist session_id -> pseudo mapping JSON")
+    command.add_argument(
+        "--trial-role",
+        choices=["all", "enroll", "target"],
+        default="all",
+        help="when --trials is used, select which side must be anonymized",
+    )
     command.add_argument("--limit", type=int)
     command.set_defaults(func=_plan_anonymization)
 
@@ -231,6 +324,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="对更长 source 做等长分块后分别匿名化并拼接；避免上游 KV cache 越界",
     )
     command.set_defaults(func=_anonymize)
+
+    command = subparsers.add_parser(
+        "prepare-saar-baseline",
+        help="build session-fixed pseudo mapping and fixed-enrollment session trials",
+    )
+    command.add_argument("--config", required=True)
+    command.add_argument("--manifest", required=True)
+    command.add_argument("--splits", required=True)
+    command.add_argument("--reference-pool", required=True)
+    command.add_argument("--output-root", required=True)
+    command.add_argument("--audio-output-root", required=True)
+    command.add_argument(
+        "--allowed-embeddings",
+        help="restrict protocol to utterances already present in this NPZ",
+    )
+    command.add_argument("--split", choices=["validation", "evaluation"], default="evaluation")
+    command.set_defaults(func=_prepare_saar_baseline)
 
     command = subparsers.add_parser("train-audio", help="训练 WavLM-Large + ECAPA-TDNN")
     command.add_argument("--config", required=True)
@@ -264,9 +374,50 @@ def build_parser() -> argparse.ArgumentParser:
     command.add_argument("--original-embeddings", required=True)
     command.add_argument("--anonymized-embeddings")
     command.add_argument("--condition", choices=["O-O", "O-A", "A-A"], required=True)
-    command.add_argument("--n", type=int, choices=[1, 5, 10, 15], required=True)
+    command.add_argument("--n", type=int, choices=[1, 2, 5, 10, 15], required=True)
     command.add_argument("--output", required=True)
     command.set_defaults(func=_score)
+
+    command = subparsers.add_parser(
+        "score-session",
+        help="score fixed-enrollment/increasing-target session trials",
+    )
+    command.add_argument("--trials", required=True)
+    command.add_argument("--original-embeddings", required=True)
+    command.add_argument("--anonymized-embeddings")
+    command.add_argument("--condition", choices=["O-O", "O-A", "A-A"], required=True)
+    command.add_argument("--n", type=int, choices=[1, 2, 5, 10, 15], required=True)
+    command.add_argument("--output", required=True)
+    command.set_defaults(func=_score_session)
+
+    command = subparsers.add_parser(
+        "compute-pcs",
+        help="compute session pseudo consistency from anonymous embeddings",
+    )
+    command.add_argument("--trials", nargs="+", required=True)
+    command.add_argument("--anonymized-embeddings", required=True)
+    command.add_argument("--output", required=True)
+    command.set_defaults(func=_pcs)
+
+    command = subparsers.add_parser(
+        "summarize-privacy",
+        help="summarize EER, delta EER, relative degradation and slope beta",
+    )
+    command.add_argument("--metrics", nargs="+", required=True)
+    command.add_argument("--output", required=True)
+    command.add_argument("--system", required=True)
+    command.add_argument("--attacker", default="lazy-informed WavLM-ECAPA mean")
+    command.add_argument("--checkpoint", required=True)
+    command.add_argument("--git-commit", required=True)
+    command.set_defaults(func=_summarize_privacy)
+
+    command = subparsers.add_parser(
+        "plot-privacy",
+        help="plot mean and seed variation for one or more privacy summaries",
+    )
+    command.add_argument("--input", nargs="+", required=True)
+    command.add_argument("--output", required=True)
+    command.set_defaults(func=_plot_privacy)
     return parser
 
 

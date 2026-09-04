@@ -22,6 +22,7 @@ def main() -> None:
         "speaker_id",
         "call_id",
         "channel",
+        "session_id",
         "audio_path",
         "start",
         "end",

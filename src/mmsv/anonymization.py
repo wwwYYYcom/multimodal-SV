@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import itertools
 import json
 import math
@@ -17,20 +18,30 @@ import numpy as np
 
 from .audio import read_segment
 from .data.fisher import iter_manifest
+from .data.session_trials import fisher_session_id
 
 
-def trial_utterance_ids(path: str | Path) -> set[str]:
+def trial_utterance_ids(path: str | Path, role: str = "all") -> set[str]:
+    if role not in {"all", "enroll", "target"}:
+        raise ValueError(f"unknown trial role: {role}")
     utterance_ids: set[str] = set()
     with Path(path).open("r", encoding="utf-8") as handle:
         for line in handle:
             trial = json.loads(line)
-            utterance_ids.update(map(str, trial["enroll_utt_ids"]))
-            utterance_ids.update(map(str, trial["target_utt_ids"]))
+            if role in {"all", "enroll"}:
+                utterance_ids.update(map(str, trial["enroll_utt_ids"]))
+            if role in {"all", "target"}:
+                utterance_ids.update(map(str, trial["target_utt_ids"]))
     return utterance_ids
 
 
 def _stable_reference_index(seed: int, utterance_id: str, pool_size: int) -> int:
     return random.Random(f"mmsv:{seed}:{utterance_id}").randrange(pool_size)
+
+
+def _stable_pseudo_seed(seed: int, mapping_key: str) -> int:
+    digest = hashlib.sha256(f"mmsv:{seed}:{mapping_key}".encode("utf-8")).digest()
+    return int.from_bytes(digest[:8], "big", signed=False)
 
 
 def build_anonymization_plan(
@@ -44,17 +55,26 @@ def build_anonymization_plan(
     split_csv: str | Path | None = None,
     split_name: str | None = None,
     one_per_call_side: bool = False,
+    reference_mapping: str = "utterance",
+    mapping_output_json: str | Path | None = None,
+    trial_role: str = "all",
 ) -> dict[str, object]:
     with Path(reference_pool_csv).open("r", encoding="utf-8", newline="") as handle:
         references = sorted(csv.DictReader(handle), key=lambda row: row["utt_id"])
     if not references:
         raise ValueError("LibriSpeech reference pool 为空")
+    if reference_mapping not in {"utterance", "session"}:
+        raise ValueError("reference_mapping must be 'utterance' or 'session'")
 
     if trial_jsonl is not None and split_csv is not None:
         raise ValueError("trial filter 与 split filter 不能同时使用")
     if (split_csv is None) != (split_name is None):
         raise ValueError("split_csv 与 split_name 必须同时提供")
-    requested = trial_utterance_ids(trial_jsonl) if trial_jsonl is not None else None
+    requested = (
+        trial_utterance_ids(trial_jsonl, trial_role)
+        if trial_jsonl is not None
+        else None
+    )
     split_for: dict[str, str] | None = None
     if split_csv is not None:
         with Path(split_csv).open("r", encoding="utf-8", newline="") as handle:
@@ -86,11 +106,23 @@ def build_anonymization_plan(
     if not source_rows:
         raise ValueError("匿名化计划没有 source utterance")
 
+    reference_for_key: dict[str, dict[str, str]] = {}
+    for row in source_rows:
+        mapping_key = (
+            row["utt_id"]
+            if reference_mapping == "utterance"
+            else fisher_session_id(row)
+        )
+        if mapping_key not in reference_for_key:
+            reference_for_key[mapping_key] = references[
+                _stable_reference_index(seed, mapping_key, len(references))
+            ]
+
     output_path = Path(output_csv)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     audio_root = Path(audio_output_root).resolve()
     fieldnames = [
-        "utt_id", "speaker_id", "call_id", "channel", "audio_path", "start", "end",
+        "utt_id", "speaker_id", "call_id", "channel", "session_id", "audio_path", "start", "end",
         "duration", "transcript", "reference_utt_id", "reference_speaker_id",
         "reference_audio_path", "reference_duration", "output_audio_path",
     ]
@@ -100,12 +132,16 @@ def build_anonymization_plan(
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         for row in source_rows:
-            reference = references[_stable_reference_index(seed, row["utt_id"], len(references))]
+            session_id = fisher_session_id(row)
+            mapping_key = row["utt_id"] if reference_mapping == "utterance" else session_id
+            reference = reference_for_key[mapping_key]
             reference_ids.add(reference["utt_id"])
             total_seconds += float(row["duration"])
             destination = audio_root / row["speaker_id"] / f"{row['utt_id']}.flac"
             writer.writerow({
-                **{name: row[name] for name in fieldnames[:9]},
+                **{name: row[name] for name in fieldnames[:4]},
+                "session_id": session_id,
+                **{name: row[name] for name in fieldnames[5:10]},
                 "reference_utt_id": reference["utt_id"],
                 "reference_speaker_id": reference["speaker_id"],
                 "reference_audio_path": reference["audio_path"],
@@ -118,11 +154,18 @@ def build_anonymization_plan(
         "manifest": str(Path(manifest_path).resolve()),
         "reference_pool": str(Path(reference_pool_csv).resolve()),
         "trial_filter": None if trial_jsonl is None else str(Path(trial_jsonl).resolve()),
+        "trial_role": trial_role,
         "split_filter": None if split_csv is None else str(Path(split_csv).resolve()),
         "split_name": split_name,
         "one_per_call_side": one_per_call_side,
         "seed": seed,
-        "mapping": "per_utterance_deterministic_random",
+        "mapping": f"per_{reference_mapping}_deterministic_random",
+        "mapping_unit": (
+            "utterance_id"
+            if reference_mapping == "utterance"
+            else "fisher_call_id_plus_channel"
+        ),
+        "mapping_keys": len(reference_for_key),
         "source_utterances": len(source_rows),
         "source_hours": total_seconds / 3600.0,
         "reference_pool_utterances": len(references),
@@ -132,6 +175,37 @@ def build_anonymization_plan(
     output_path.with_suffix(".audit.json").write_text(
         json.dumps(audit, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+    if reference_mapping == "session":
+        mapping_path = (
+            Path(mapping_output_json)
+            if mapping_output_json is not None
+            else output_path.with_suffix(".pseudo_mapping.json")
+        )
+        mapping_path.parent.mkdir(parents=True, exist_ok=True)
+        sessions: dict[str, dict[str, object]] = {}
+        for mapping_key, reference in sorted(reference_for_key.items()):
+            sessions[mapping_key] = {
+                "pseudo_seed": _stable_pseudo_seed(seed, mapping_key),
+                "reference_utt_id": reference["utt_id"],
+                "reference_speaker_id": reference["speaker_id"],
+                "reference_audio_path": reference["audio_path"],
+                "reference_duration": float(reference["duration"]),
+            }
+        mapping = {
+            "schema_version": 1,
+            "mapping": "session_fixed",
+            "session_definition": "fisher_call_id_plus_channel",
+            "seed": seed,
+            "reference_pool": str(Path(reference_pool_csv).resolve()),
+            "sessions": sessions,
+        }
+        mapping_path.write_text(
+            json.dumps(mapping, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        audit["mapping_file"] = str(mapping_path.resolve())
+        output_path.with_suffix(".audit.json").write_text(
+            json.dumps(audit, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
     return audit
 
 
@@ -236,7 +310,7 @@ def anonymize_plan(
     progress_path = manifest_path.with_suffix(".progress.jsonl")
     temporary_manifest = manifest_path.with_suffix(manifest_path.suffix + ".tmp")
     fieldnames = [
-        "utt_id", "speaker_id", "call_id", "channel", "audio_path",
+        "utt_id", "speaker_id", "call_id", "channel", "session_id", "audio_path",
         "start", "end", "duration", "transcript",
     ]
     stop_index = None if limit is None else start_index + max(0, limit)
@@ -320,6 +394,7 @@ def anonymize_plan(
                 "speaker_id": row["speaker_id"],
                 "call_id": row["call_id"],
                 "channel": "0",
+                "session_id": row.get("session_id") or fisher_session_id(row),
                 "audio_path": str(destination.resolve()),
                 "start": "0",
                 "end": f"{info.duration:.8f}",
