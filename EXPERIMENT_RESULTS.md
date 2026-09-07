@@ -1703,7 +1703,7 @@ bootstrap 全部输出（EER %）：
 - 服务器工程：`/public/home/wwwyyycom123_/multimodal_sv_reproduction`；Python：`/public/home/wwwyyycom123_/venvs/mmsv/bin/python`；设备：4 × NVIDIA GeForce RTX 4090 D。
 - 数据限制仍为 Fisher Part 1 与 LibriSpeech `train-clean-360`；攻击模型为 lazy-informed WavLM-ECAPA mean，checkpoint 为服务器 `results/runs/audio_corrected_p1/last.pt`。
 - 正式协议：固定 original enrollment 15 条；anonymous target `N={1,2,5,10,15}`；5 个 trial seeds `1/2/3/4/5`；同一 Fisher `call_id + channel` 固定同一匿名参考；StreamVoiceAnon `delay=2`、`alpha=1.0`、FP32。
-- 首次三卡运行从服务器时间 `2026-09-06 08:54:22 +00:00` 开始，在约 45,939 条输出后因外部后台进程终止而中断；日志未出现 `worker_failed`、Traceback 或 CUDA OOM。已有非空 FLAC 全部保留。
+- 首次三卡运行从服务器时间 `2026-09-06 08:54:22 +00:00` 开始，在约 45,939 条输出后中断；原因尚未确证，外部终止只是推测。日志未出现 `worker_failed`、Traceback 或 CUDA OOM。已有非空 FLAC 全部保留。
 - 四卡断点恢复从 `2026-09-07 07:01:32 +00:00` 开始，16 workers；恢复阶段处理 66,712 行，其中生成 20,773 条、跳过已有 45,939 条。匿名化于 `2026-09-07 12:38:06 +00:00` 完成，恢复阶段 wall time `20,136 s`（5.593333 h）；整个 Gate 1 流水线于 `2026-09-07 13:30:12 +00:00` 完成。
 - 匿名音频最终验证：66,712 plan rows、66,712 manifest rows、66,712 unique IDs，ID 顺序完全一致；源音频 `262,220.739000 s`，输出音频 `260,665.797375 s`，输出 `4,314,573,754` bytes；时长相对误差 P50/P95/max 为 `0.687373% / 3.081522% / 4.387255%`；抽查 100 条均可读、16 kHz mono、finite，缺失/损坏/格式错误/非有限样本均为 0；恢复阶段 RTF `0.0767903`。
 - 后处理使用 GPU 0 提取 66,712 个匿名 embeddings，随后自动完成全部 EER、PCS、1,000 次 paired stratified bootstrap、绘图和 Gate 1 判定；未自动启动 Phase 3。
@@ -1769,3 +1769,40 @@ bootstrap 全部输出（EER %）：
 - 本机导入时间：`2026-09-07 22:51:30 +08:00`；导入命令：`scripts\import_saar_gate1_results.ps1 -Archive results\mmsv_saar_gate1_results_20260907_144423.tar`。
 - 本机结果归档：`D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\results\mmsv_saar_gate1_results_20260907_144423.tar`，68,085,760 bytes，SHA-256 `d6c3a01c968ef5e0dd58ec3d358d8507177fe869d32036b38ba36fc5594ab3e0`；对应 SHA manifest 为同名 `.tar.sha256`（137 bytes）。归档共 16 个成员，明确不含 4.31 GB 匿名 FLAC。
 - 正式执行入口：`scripts\anonymize_saar_session_baseline_multigpu.sh`；评测：`scripts\evaluate_saar_session_baseline.py`；bootstrap：`scripts\bootstrap_saar_privacy.py`；协议审计：`scripts\audit_saar_protocol.py`；打包/导入：`scripts\package_saar_gate1_results.sh`、`scripts\import_saar_gate1_results.ps1`。各文件的代码指纹已记录在 30.4 与 30.6。
+
+### 30.8 A-A 准备与 O-A 分组 bootstrap 复核
+
+- 本机 O-A 复核完成时间：`2026-09-07T15:21:28.640604+00:00`。本节是正式 Gate 1 后的探索性稳健性分析，不重新定义原 Gate 阈值。
+- 运行代码：`scripts/saar_robustness.py`；命令：`D:/codeAPP/anaconda3/envs/pytorch/python.exe scripts/saar_robustness.py --mode local-oa --output artifacts/saar/robustness_local_20260907 --replicates 1000`。
+- 复用原 lazy checkpoint 的 original 与 session-fixed anonymous embeddings；O-A 全部 25 个点重新评分。没有进行训练或更换 trials。
+- 1,335 个 speaker clusters，bootstrap seed 2027，1,000 replicates；同一 replicate 的说话人权重在全部 N 和五个 seed 之间共享。第一种按 enrollment speaker 重采样；第二种 shared-speaker dyadic 敏感性分析将 impostor trial 权重设为两端 speaker multiplicity 的乘积，genuine trial 仅计同一个 speaker multiplicity。两者均条件于已有 trial graph、参考映射及 checkpoint，不代表覆盖全部数据生成不确定性。
+- 加权 ROC 在相同分数处整体更新阈值，避免把并列分数按任意排序拆开。历史 point metrics 保留原实现以便比较。
+
+| bootstrap 方法 | ΔEER15 mean (pp) | 95% CI low | 95% CI high |
+|---|---:|---:|---:|
+| enrollment speaker | 1.355820 | 0.599251 | 2.172285 |
+| shared speaker dyadic sensitivity | 1.376561 | 0.275333 | 2.494395 |
+
+完整逐 N bootstrap 结果（EER %）：
+
+| 方法 | N | mean | CI low | CI high |
+|---|---:|---:|---:|---:|
+| enrollment | 1 | 42.075371 | 41.258427 | 42.951311 |
+| enrollment | 2 | 42.069483 | 41.243446 | 42.921348 |
+| enrollment | 5 | 41.308240 | 40.359176 | 42.172285 |
+| enrollment | 10 | 40.604764 | 39.670412 | 41.468165 |
+| enrollment | 15 | 40.719551 | 39.790262 | 41.543071 |
+| dyadic | 1 | 42.103129 | 41.017487 | 43.240145 |
+| dyadic | 2 | 42.091958 | 40.919444 | 43.253749 |
+| dyadic | 5 | 41.318905 | 40.177866 | 42.476316 |
+| dyadic | 10 | 40.617942 | 39.415150 | 41.753188 |
+| dyadic | 15 | 40.726568 | 39.509453 | 41.834618 |
+
+- 结论：两种复核 CI 均排除 0，但效应仍小；先补跨通话 A-A 及 semi-informed-transfer 攻击，暂不启动 SAAR MVP 训练。PCS 大幅增加只说明内部一致性，尚无 paired 比较 CI，不应称为统计显著的隐私改善。
+- 全部本机输出根目录：`D:/deeplearning/ICASSP2027/multimodal_sv_reproduction/artifacts/saar/robustness_local_20260907/lazy`。`O-A/scores` 保存重新生成的 25 组逐 trial CSV 与 metrics；`O-A/privacy.csv` 保存所有 seed/N 点；`O-A/enrollment_speaker_replicates.csv`、`O-A/shared_speaker_dyadic_replicates.csv` 分别保存全部 1,000 次重采样数值；`summary.json` 保存汇总、输入哈希和完成时间。
+- `O-A/cluster_bootstrap.json` SHA256：`97453b07bcf159ac89c8be6720617c561765ee77e59fb534a7a7a8fe3e523be0`。
+- A-A 准备：enrollment union 55,919；target union 66,712；交集 52,167；缺失 3,752；完整并集 70,464。新增 enrollment 涉及 12 个原 target 未覆盖的 session，使用同一 seed 2027 和原 sorted reference pool 延伸映射；2,796 个已有 session 的 reference ID 全部核对一致。
+- 本机准备文件：`artifacts/saar/robustness_prepare_20260907_v2/missing_enrollment_plan.csv`（3,752 行；SHA256 `3aa20301f32d43b70845e1be2f994bb88f9c629ec425480f344ff92ac0e8f07f`）、`union_plan.csv`（70,464 行）、`preparation.json`。首次准备在发现新 session 时主动报错，未生成音频；随后增加经审计的同算法映射延伸。
+- 服务端运行入口：`scripts/run_saar_robustness.sh`；说明见 `SAAR_ROBUSTNESS_RUNBOOK.md`。服务器会现场从已重映射计划生成缺失计划，无需上传本机 Windows 路径 CSV。一个 worker/GPU 补音频，随后验证 union，分别以 lazy 与 semi-informed checkpoint 提取对应 embeddings，评测 O-A/A-A 并写入服务器本总账及结果 TAR。semi-informed 是从 utterance-random 训练分布迁移的攻击者，不称作充分适应 session-fixed 的攻击者。
+- 当前完成范围：本机 O-A 统计复核、A-A 计划和代码准备；服务器 A-A 生成、两种攻击者最终对照均尚未执行，不能提前报告数值。
+- 验证：`D:/codeAPP/anaconda3/envs/pytorch/python.exe -m pytest -q`，40 项通过，包含 tied-score 加权 EER、权重复制等价、genuine/dyadic cluster 权重及空类别拒绝；`git diff --check` 通过。

@@ -183,7 +183,11 @@ def score_session_trials(
         raise ValueError("fixed enrollment size is inconsistent across trials")
     eer, threshold = compute_eer(np.asarray(labels), np.asarray(scores))
     result = {
-        "protocol": "fixed-original-enrollment/increasing-anonymized-target",
+        "protocol": {
+            "O-O": "fixed-original-enrollment/increasing-original-target",
+            "O-A": "fixed-original-enrollment/increasing-anonymized-target",
+            "A-A": "fixed-anonymized-enrollment/increasing-anonymized-target",
+        }[condition],
         "condition": condition,
         "aggregation": "mean",
         "seed": seed,
