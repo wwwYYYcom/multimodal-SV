@@ -7,5 +7,7 @@ __pycache__/
 /artifacts/
 /checkpoints/
 /results/runs/
+/results/mmsv_*_results_*.tar
+/results/mmsv_*_results_*.tar.sha256
 /tmp/
 *.log

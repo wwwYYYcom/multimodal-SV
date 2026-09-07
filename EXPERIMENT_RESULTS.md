@@ -1696,3 +1696,76 @@ bootstrap 全部输出（EER %）：
 - WavLM-ECAPA 后处理 smoke 于 2026-09-04 17:22:31–17:22:33 +08:00 完成：使用 `results/runs/audio_corrected_p1/last.pt` 从上述 4 条 session-fixed FLAC 提取 `4 × 192` embeddings；全部 finite，L2 norm 范围 `[0.9999999999999999, 1.0]`。六个 utterance pair 的 cosine 为 `0.6726330/0.6704948/0.6138860/0.6138741/0.5532448/0.6295360`，该单 session 的 smoke PCS 为 `0.6256114672`。样本量只有 4，不能作为正式 PCS，只用于证明新匿名 manifest 可直接进入现有 embedding 路径。
 - embedding smoke 运行命令：`python -m mmsv.cli extract-embeddings --checkpoint results/runs/audio_corrected_p1/last.pt --manifest results/runs/saar_local_session_smoke/20260904_171825_467/session_smoke.manifest.csv --output results/runs/saar_local_session_smoke/20260904_171825_467/session_smoke.embeddings.npz`。
 - `results\runs\saar_local_session_smoke\20260904_171825_467\session_smoke.embeddings.npz` 为 3,337 字节，SHA-256 `c9506774994b0e9cea150212246d3ea5f5cc491695bc74d45966f800ec1dbb47`；对应 `session_smoke.embeddings.audit.json` 为 505 字节，SHA-256 `1e28165f3f455b98a27c8bcce68d4970a1b7669b25a031982cb961ebda83b634`。
+
+### 30.7 服务器正式 session-fixed baseline、Gate 1 与结果导入（完成）
+
+- 正式运行代码版本：Git commit `53df188127ed249b9fdb6cf6f0e964dbee96faf2`。
+- 服务器工程：`/public/home/wwwyyycom123_/multimodal_sv_reproduction`；Python：`/public/home/wwwyyycom123_/venvs/mmsv/bin/python`；设备：4 × NVIDIA GeForce RTX 4090 D。
+- 数据限制仍为 Fisher Part 1 与 LibriSpeech `train-clean-360`；攻击模型为 lazy-informed WavLM-ECAPA mean，checkpoint 为服务器 `results/runs/audio_corrected_p1/last.pt`。
+- 正式协议：固定 original enrollment 15 条；anonymous target `N={1,2,5,10,15}`；5 个 trial seeds `1/2/3/4/5`；同一 Fisher `call_id + channel` 固定同一匿名参考；StreamVoiceAnon `delay=2`、`alpha=1.0`、FP32。
+- 首次三卡运行从服务器时间 `2026-09-06 08:54:22 +00:00` 开始，在约 45,939 条输出后因外部后台进程终止而中断；日志未出现 `worker_failed`、Traceback 或 CUDA OOM。已有非空 FLAC 全部保留。
+- 四卡断点恢复从 `2026-09-07 07:01:32 +00:00` 开始，16 workers；恢复阶段处理 66,712 行，其中生成 20,773 条、跳过已有 45,939 条。匿名化于 `2026-09-07 12:38:06 +00:00` 完成，恢复阶段 wall time `20,136 s`（5.593333 h）；整个 Gate 1 流水线于 `2026-09-07 13:30:12 +00:00` 完成。
+- 匿名音频最终验证：66,712 plan rows、66,712 manifest rows、66,712 unique IDs，ID 顺序完全一致；源音频 `262,220.739000 s`，输出音频 `260,665.797375 s`，输出 `4,314,573,754` bytes；时长相对误差 P50/P95/max 为 `0.687373% / 3.081522% / 4.387255%`；抽查 100 条均可读、16 kHz mono、finite，缺失/损坏/格式错误/非有限样本均为 0；恢复阶段 RTF `0.0767903`。
+- 后处理使用 GPU 0 提取 66,712 个匿名 embeddings，随后自动完成全部 EER、PCS、1,000 次 paired stratified bootstrap、绘图和 Gate 1 判定；未自动启动 Phase 3。
+
+正式 session-fixed baseline 的逐 seed O-A EER（%）如下；`ΔEER15 = EER(N=1)-EER(N=15)`，RD15 为相对下降百分比：
+
+| seed | N=1 | N=2 | N=5 | N=10 | N=15 | ΔEER15 (pp) | RD15 (%) |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 43.220974 | 41.722846 | 41.573034 | 40.898876 | 40.898876 | 2.322097 | 5.372617 |
+| 2 | 40.823970 | 41.198502 | 39.475655 | 39.775281 | 40.674157 | 0.149813 | 0.366972 |
+| 3 | 43.370787 | 43.745318 | 42.696629 | 41.423221 | 40.898876 | 2.471910 | 5.699482 |
+| 4 | 42.022472 | 41.573034 | 41.722846 | 41.423221 | 41.273408 | 0.749064 | 1.782531 |
+| 5 | 41.048689 | 42.172285 | 41.123596 | 39.850187 | 39.925094 | 1.123596 | 2.737226 |
+
+五个 seed 的汇总（EER fraction；std 为跨 seed 标准差）：
+
+| N | mean EER | std | mean EER (%) |
+|---:|---:|---:|---:|
+| 1 | 0.4209737828 | 0.0105933600 | 42.097378 |
+| 2 | 0.4208239700 | 0.0088807493 | 42.082397 |
+| 5 | 0.4131835206 | 0.0105466462 | 41.318352 |
+| 10 | 0.4067415730 | 0.0072932803 | 40.674157 |
+| 15 | 0.4073408240 | 0.0044793757 | 40.734082 |
+
+- mean `ΔEER15 = 1.3632958801 pp`，mean `|beta| = 0.0041455772` EER fraction/log2 N（0.414558 pp/log2 N）。趋势总体随 N 改善，但 N=10 到 N=15 有轻微反弹；Gate 使用预注册的 N=1 与 N=15 端点差及 bootstrap CI 判定，而不要求逐点严格单调。
+- 正式 session-fixed PCS 定义为 `mean_session_mean_pairwise_cosine`：2,796 sessions，PCS `0.6066938294`，session 间标准差 `0.0760869147`。它显著高于 utterance-random control 的 `0.3459139683`，符合固定 session 伪声纹提高跨 utterance 一致性的预期。
+
+1,000 次 paired stratified trial bootstrap（bootstrap seed `2027`，EER %）：
+
+| N | bootstrap mean | 95% CI low | 95% CI high |
+|---:|---:|---:|---:|
+| 1 | 42.092075 | 41.257678 | 42.906367 |
+| 2 | 42.099730 | 41.288390 | 42.936704 |
+| 5 | 41.358277 | 40.538951 | 42.202622 |
+| 10 | 40.660569 | 39.865169 | 41.558052 |
+| 15 | 40.753738 | 39.910112 | 41.588015 |
+
+- bootstrap `ΔEER15` mean 为 `1.3383370787 pp`，95% CI `[0.5692883895, 2.1423220974] pp`，排除 0。
+- Gate 1 条件为 mean `ΔEER15 >= 1.0 pp` 且 paired bootstrap 95% CI 排除 0；两项均满足，故 `passed=true`，下一步为 `proceed_to_saar_mvp_training`。
+- 与 utterance-random control 对比：control mean `ΔEER15=4.779026 pp`、PCS `0.345914`；session-fixed mean `ΔEER15=1.363296 pp`、PCS `0.606694`。固定 session 伪声纹使匿名语音内部更一致、初始 EER 略高，但显著削弱随 N 聚合带来的额外 EER 下降；这正是后续 SAAR 训练需要进一步优化的基线。
+
+正式输出与文件指纹：
+
+| 文件 | 字节数 | SHA-256 |
+|---|---:|---|
+| `artifacts\saar\session_baseline\evaluation_summary.json` | 4,107 | `3af3888cffafe775d6b14328f27ce2f8e8e5b616b2e448d210e7be2242349bfa` |
+| `artifacts\saar\session_baseline\metrics\privacy_summary.csv` | 14,309 | `2d67775aa04e26c9ec454ae4dd6f4814c499d1cd50b181907a51f9c9786f89e2` |
+| `artifacts\saar\session_baseline\metrics\privacy_summary.summary.json` | 962 | `a6d7ba494a5bbb198fa59dc6bf6a81fb63da87aadcd78ec00681d87ebb1b371d` |
+| `artifacts\saar\session_baseline\metrics\bootstrap_ci.csv` | 364 | `ee6b1c1dc99859c9406a8175b60f6fcf3acea53cdd677eb70cc95cc8094f7a32` |
+| `artifacts\saar\session_baseline\metrics\bootstrap_ci.summary.json` | 1,484 | `92bb04618b184678300ea93ee02ac61aa5c220b921ccddcbdf9f36b01ca3f187` |
+| `artifacts\saar\session_baseline\metrics\pcs_summary.csv` | 103,250 | `336ab167b8b86d093850fb6dd597ff2de9631366b349a91d9c6501c0558c9631` |
+| `artifacts\saar\session_baseline\metrics\pcs_summary.metrics.json` | 289 | `f0de42dc2ff6d6d763153b0905e26a6c6fc22eb9bb1141472b7fea65103f781d` |
+| `artifacts\saar\session_baseline\metrics\gate_1.json` | 507 | `76ef120df2e3e249bdc1df9f51c25d1c78766d2c9a21320f97373437bcd97941` |
+| `artifacts\saar\session_baseline\figures\eer_vs_n.png` | 69,938 | `ba59dabc3dbd4e359e1cf541bff7fb2c0d57f7e3b6309b8484a504e4549cf081` |
+| `artifacts\saar\session_baseline\embeddings\anonymized_evaluation_corrected.npz` | 47,721,352 | `25b6c119995a74ae0fcb435ee0dc24184a1b839c26a4cb7c3bb92edbc39fdfa0` |
+| `artifacts\saar\session_baseline\manifests\session_baseline_anonymized_manifest.csv` | 18,367,727 | `8df74930e78e835a7490570112bfe534010e189017213a1f59068f4b140f7193` |
+| `artifacts\saar\session_baseline\manifests\session_baseline_anonymized_manifest.audit.json` | 17,874 | `7c04a2b19df8c11312c3f04437abf8df81652c71a7c1d7c82345c30293645ff1` |
+| `results\runs\saar_session_baseline\final.validation.json` | 1,006 | `e95e6d0ecd7f57f4576b20313d2b6aac019a6b18b1f46b8a1cf01ddaef96313e` |
+| `results\runs\saar_session_baseline\server_supervisor.log` | 1,764,726 | `7c6f5c84b852d67fe7f3175791b72b26bfe593c51b855e04a7096e5908667f2f` |
+
+- 服务器匿名 FLAC 根目录：`/public/home/wwwyyycom123_/multimodal_sv_reproduction/artifacts/saar/anonymized/session_baseline_evaluation`（66,712 files，4,314,573,754 bytes；音频因体积未放入精简结果 TAR）。
+- 每个 seed/N 的完整 trial score 文件保留在服务器 `artifacts/saar/session_baseline/scores/oa_mean_N{N}_seed{seed}.csv`，对应指标为同目录 `.metrics.json`；全部汇总值已收入本节及 `privacy_summary.csv`。
+- 本机导入时间：`2026-09-07 22:51:30 +08:00`；导入命令：`scripts\import_saar_gate1_results.ps1 -Archive results\mmsv_saar_gate1_results_20260907_144423.tar`。
+- 本机结果归档：`D:\deeplearning\ICASSP2027\multimodal_sv_reproduction\results\mmsv_saar_gate1_results_20260907_144423.tar`，68,085,760 bytes，SHA-256 `d6c3a01c968ef5e0dd58ec3d358d8507177fe869d32036b38ba36fc5594ab3e0`；对应 SHA manifest 为同名 `.tar.sha256`（137 bytes）。归档共 16 个成员，明确不含 4.31 GB 匿名 FLAC。
+- 正式执行入口：`scripts\anonymize_saar_session_baseline_multigpu.sh`；评测：`scripts\evaluate_saar_session_baseline.py`；bootstrap：`scripts\bootstrap_saar_privacy.py`；协议审计：`scripts\audit_saar_protocol.py`；打包/导入：`scripts\package_saar_gate1_results.sh`、`scripts\import_saar_gate1_results.ps1`。各文件的代码指纹已记录在 30.4 与 30.6。
