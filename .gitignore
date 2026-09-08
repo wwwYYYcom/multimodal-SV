@@ -9,5 +9,7 @@ __pycache__/
 /results/runs/
 /results/mmsv_*_results_*.tar
 /results/mmsv_*_results_*.tar.sha256
+/results/robustness_*_results.tar
+/results/robustness_*_results.tar.sha256
 /tmp/
 *.log

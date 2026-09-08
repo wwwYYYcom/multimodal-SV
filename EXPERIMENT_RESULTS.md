@@ -1806,3 +1806,164 @@ bootstrap 全部输出（EER %）：
 - 服务端运行入口：`scripts/run_saar_robustness.sh`；说明见 `SAAR_ROBUSTNESS_RUNBOOK.md`。服务器会现场从已重映射计划生成缺失计划，无需上传本机 Windows 路径 CSV。一个 worker/GPU 补音频，随后验证 union，分别以 lazy 与 semi-informed checkpoint 提取对应 embeddings，评测 O-A/A-A 并写入服务器本总账及结果 TAR。semi-informed 是从 utterance-random 训练分布迁移的攻击者，不称作充分适应 session-fixed 的攻击者。
 - 当前完成范围：本机 O-A 统计复核、A-A 计划和代码准备；服务器 A-A 生成、两种攻击者最终对照均尚未执行，不能提前报告数值。
 - 验证：`D:/codeAPP/anaconda3/envs/pytorch/python.exe -m pytest -q`，40 项通过，包含 tied-score 加权 EER、权重复制等价、genuine/dyadic cluster 权重及空类别拒绝；`git diff --check` 通过。
+
+
+### 30.9 服务器 O-A/A-A 双攻击者结果导入与复核（2026-09-08）
+
+- 服务器完成：2026-09-07T18:49:09.098492+00:00（北京时间 2026-09-08 02:49:09）。运行代码提交 dc105b05542250170f8fbb074712aff9938fe31e；入口 scripts/run_saar_robustness.sh、scripts/saar_robustness.py；统计方法和限制见 30.8。
+- 本机包：results/robustness_20260907_153400_results.tar，152,514,560 bytes，SHA256 fc7208fc8920a47389136768482d5df253f390ac2a61eedd9a8f9b557a5909b3。263 个成员；file_hashes.json 所列 240 个文件逐一验证通过。
+- 本机输出根目录：D:/deeplearning/ICASSP2027/multimodal_sv_reproduction/artifacts/saar/robustness_20260907_153400；服务器相同相对路径位于 /public/home/wwwyyycom123_/multimodal_sv_reproduction 下。服务器实验总账单独保存于 results/runs/saar_robustness/import_20260908/EXPERIMENT_RESULTS.md，未覆盖本机总账。
+- union 校验：70,464 行及唯一 ID，顺序匹配；源音频 276,863.469 s，匿名输出 275,222.13324998406 s、4,555,593,046 bytes；时长相对误差 P50/P95/max 为 0.0068737271/0.0308152174/0.0438725490。服务器报告缺失、不可读、格式错误为零；100 条 finite 抽查通过，不应表述为全音频 finite 验证。
+- 本机复核 100 份 score CSV，每份 2,670 trials，分数 finite、通话隔离、重算 EER 与指标 JSON 一致。lazy_extra.npz 为 3,752×192，semi_union.npz 为 70,464×192，ID 无重复且向量全部 finite。完整哈希目录为输出根目录/file_hashes.json。
+
+| 攻击者 | 条件 | N=1 | N=2 | N=5 | N=10 | N=15 | ΔEER15 pp | dyadic 95% CI pp |
+|---|---|---:|---:|---:|---:|---:|---:|---|
+| lazy | O-A | 42.097378 | 42.082397 | 41.318352 | 40.674157 | 40.734082 | 1.363296 | 0.275333, 2.494395 |
+| lazy | A-A | 47.685393 | 47.220974 | 47.176030 | 47.205993 | 47.191011 | 0.494382 | -0.736362, 1.609933 |
+| semi_transfer | O-A | 24.074906 | 17.977528 | 11.655431 | 9.258427 | 8.539326 | 15.535581 | 14.500357, 16.669048 |
+| semi_transfer | A-A | 22.786517 | 17.258427 | 12.314607 | 10.531835 | 9.677903 | 13.108614 | 11.915346, 14.047488 |
+
+以下逐 seed 表包含全部 100 个 EER 点；单位 %。逐 trial 分数保留在各攻击者/条件/scores 下，全部 bootstrap replicate 值保留在各条件的两个 *_replicates.csv 中。
+
+#### lazy
+
+- 完成 UTC：2026-09-07T17:53:37.003165+00:00。
+- checkpoint：results/runs/audio_corrected_p1/last.pt，SHA256 0c69749dbb51929054e3e57990b04d2e737cefd96902f1d0100e80b402313508。
+- original embedding：artifacts/embeddings/original_evaluation_corrected.npz，SHA256 9c8c944a758f92dac45b4225f73317a83113d6a3ad744a5eac2580f2fb314ff3。
+- anonymous embedding：artifacts/saar/session_baseline/embeddings/anonymized_evaluation_corrected.npz，SHA256 25b6c119995a74ae0fcb435ee0dc24184a1b839c26a4cb7c3bb92edbc39fdfa0。
+- anonymous embedding：artifacts/saar/robustness_20260907_153400/lazy_extra.npz，SHA256 89fd0032ad795f6a497ef2b13f5ba27f32b83704cf5a2451e9aa8304e132b39e。
+
+O-A 逐 seed EER：
+
+| seed | N=1 | N=2 | N=5 | N=10 | N=15 |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 43.220974 | 41.722846 | 41.573034 | 40.898876 | 40.898876 |
+| 2 | 40.823970 | 41.198502 | 39.475655 | 39.775281 | 40.674157 |
+| 3 | 43.370787 | 43.745318 | 42.696629 | 41.423221 | 40.898876 |
+| 4 | 42.022472 | 41.573034 | 41.722846 | 41.423221 | 41.273408 |
+| 5 | 41.048689 | 42.172285 | 41.123596 | 39.850187 | 39.925094 |
+
+Bootstrap 结果（1,000 replicates；同一说话人权重跨 N、跨 seed 共享）：
+
+| 方法 | Δ mean pp | Δ 95% CI pp |
+|---|---:|---|
+| enrollment_speaker | 1.355820 | 0.599251, 2.172285 |
+| shared_speaker_dyadic | 1.376561 | 0.275333, 2.494395 |
+
+| 方法 | N | EER bootstrap mean % | 95% CI % |
+|---|---:|---:|---|
+| enrollment_speaker | 1 | 42.075371 | 41.258427, 42.951311 |
+| enrollment_speaker | 2 | 42.069483 | 41.243446, 42.921348 |
+| enrollment_speaker | 5 | 41.308240 | 40.359176, 42.172285 |
+| enrollment_speaker | 10 | 40.604764 | 39.670412, 41.468165 |
+| enrollment_speaker | 15 | 40.719551 | 39.790262, 41.543071 |
+| shared_speaker_dyadic | 1 | 42.103129 | 41.017487, 43.240145 |
+| shared_speaker_dyadic | 2 | 42.091958 | 40.919444, 43.253749 |
+| shared_speaker_dyadic | 5 | 41.318905 | 40.177866, 42.476316 |
+| shared_speaker_dyadic | 10 | 40.617942 | 39.415150, 41.753188 |
+| shared_speaker_dyadic | 15 | 40.726568 | 39.509453, 41.834618 |
+
+A-A 逐 seed EER：
+
+| seed | N=1 | N=2 | N=5 | N=10 | N=15 |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 48.164794 | 47.415730 | 48.539326 | 48.689139 | 48.164794 |
+| 2 | 46.666667 | 45.692884 | 46.516854 | 46.816479 | 46.741573 |
+| 3 | 47.116105 | 47.265918 | 46.591760 | 46.741573 | 47.265918 |
+| 4 | 48.539326 | 47.790262 | 46.591760 | 46.367041 | 46.367041 |
+| 5 | 47.940075 | 47.940075 | 47.640449 | 47.415730 | 47.415730 |
+
+Bootstrap 结果（1,000 replicates；同一说话人权重跨 N、跨 seed 共享）：
+
+| 方法 | Δ mean pp | Δ 95% CI pp |
+|---|---:|---|
+| enrollment_speaker | 0.443356 | -0.359551, 1.273408 |
+| shared_speaker_dyadic | 0.424837 | -0.736362, 1.609933 |
+
+| 方法 | N | EER bootstrap mean % | 95% CI % |
+|---|---:|---:|---|
+| enrollment_speaker | 1 | 47.642966 | 46.606367, 48.689513 |
+| enrollment_speaker | 2 | 47.246037 | 46.036704, 48.434457 |
+| enrollment_speaker | 5 | 47.195071 | 46.037079, 48.449438 |
+| enrollment_speaker | 10 | 47.199790 | 45.932584, 48.449438 |
+| enrollment_speaker | 15 | 47.199610 | 46.037453, 48.420225 |
+| shared_speaker_dyadic | 1 | 47.634659 | 46.222035, 48.982685 |
+| shared_speaker_dyadic | 2 | 47.248412 | 45.866367, 48.579760 |
+| shared_speaker_dyadic | 5 | 47.233045 | 45.652554, 48.715779 |
+| shared_speaker_dyadic | 10 | 47.206104 | 45.731685, 48.704507 |
+| shared_speaker_dyadic | 15 | 47.209822 | 45.770406, 48.696754 |
+
+#### semi_transfer
+
+- 完成 UTC：2026-09-07T18:49:08.817592+00:00。
+- checkpoint：results/runs/audio_semi_corrected/last.pt，SHA256 62fc5dfd8a48f2998eadbf3e9cfbf610e231c4eceb50e36195ea0f1554fb5e78。
+- original embedding：artifacts/embeddings/original_evaluation_semi_corrected.npz，SHA256 c4a1c1ba3dddbcf7194704617d79258a0103e6ff224cfbca0280812e511335de。
+- anonymous embedding：artifacts/saar/robustness_20260907_153400/semi_union.npz，SHA256 3282595faa6ae91259ef3bf8ca14847766dc529a7e7cf961387e9446400dadd2。
+
+O-A 逐 seed EER：
+
+| seed | N=1 | N=2 | N=5 | N=10 | N=15 |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 24.194757 | 17.902622 | 11.610487 | 9.288390 | 8.614232 |
+| 2 | 23.146067 | 16.779026 | 11.161049 | 8.838951 | 8.239700 |
+| 3 | 24.719101 | 18.277154 | 11.760300 | 9.812734 | 8.838951 |
+| 4 | 24.344569 | 18.352060 | 11.760300 | 9.063670 | 8.838951 |
+| 5 | 23.970037 | 18.576779 | 11.985019 | 9.288390 | 8.164794 |
+
+Bootstrap 结果（1,000 replicates；同一说话人权重跨 N、跨 seed 共享）：
+
+| 方法 | Δ mean pp | Δ 95% CI pp |
+|---|---:|---|
+| enrollment_speaker | 15.559910 | 14.756180, 16.419476 |
+| shared_speaker_dyadic | 15.564044 | 14.500357, 16.669048 |
+
+| 方法 | N | EER bootstrap mean % | 95% CI % |
+|---|---:|---:|---|
+| enrollment_speaker | 1 | 24.083086 | 23.310861, 24.943820 |
+| enrollment_speaker | 2 | 17.920105 | 17.168165, 18.711985 |
+| enrollment_speaker | 5 | 11.701228 | 10.981273, 12.449813 |
+| enrollment_speaker | 10 | 9.253783 | 8.538951, 9.977903 |
+| enrollment_speaker | 15 | 8.523176 | 7.805243, 9.259176 |
+| shared_speaker_dyadic | 1 | 24.083953 | 23.005521, 25.173591 |
+| shared_speaker_dyadic | 2 | 17.915186 | 16.929292, 18.934554 |
+| shared_speaker_dyadic | 5 | 11.724416 | 10.855559, 12.664302 |
+| shared_speaker_dyadic | 10 | 9.258822 | 8.423090, 10.091261 |
+| shared_speaker_dyadic | 15 | 8.519909 | 7.668202, 9.408219 |
+
+A-A 逐 seed EER：
+
+| seed | N=1 | N=2 | N=5 | N=10 | N=15 |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 23.071161 | 17.303371 | 11.910112 | 10.486891 | 9.138577 |
+| 2 | 21.498127 | 16.554307 | 12.734082 | 10.636704 | 9.812734 |
+| 3 | 22.397004 | 17.228464 | 12.209738 | 10.411985 | 9.513109 |
+| 4 | 24.344569 | 17.827715 | 12.509363 | 10.936330 | 9.812734 |
+| 5 | 22.621723 | 17.378277 | 12.209738 | 10.187266 | 10.112360 |
+
+Bootstrap 结果（1,000 replicates；同一说话人权重跨 N、跨 seed 共享）：
+
+| 方法 | Δ mean pp | Δ 95% CI pp |
+|---|---:|---|
+| enrollment_speaker | 13.053483 | 12.208989, 13.917603 |
+| shared_speaker_dyadic | 13.041822 | 11.915346, 14.047488 |
+
+| 方法 | N | EER bootstrap mean % | 95% CI % |
+|---|---:|---:|---|
+| enrollment_speaker | 1 | 22.714801 | 21.917228, 23.520599 |
+| enrollment_speaker | 2 | 17.252060 | 16.404494, 18.007491 |
+| enrollment_speaker | 5 | 12.312614 | 11.550562, 13.138577 |
+| enrollment_speaker | 10 | 10.493288 | 9.647940, 11.235955 |
+| enrollment_speaker | 15 | 9.661318 | 8.794007, 10.471910 |
+| shared_speaker_dyadic | 1 | 22.710488 | 21.611500, 23.816103 |
+| shared_speaker_dyadic | 2 | 17.265378 | 16.254587, 18.244747 |
+| shared_speaker_dyadic | 5 | 12.330335 | 11.420252, 13.200698 |
+| shared_speaker_dyadic | 10 | 10.479282 | 9.561511, 11.331743 |
+| shared_speaker_dyadic | 15 | 9.668666 | 8.757760, 10.573812 |
+
+结论与边界：
+
+- lazy O-A 小幅下降，lazy A-A 的 ΔEER15 约 0.494382 pp 且两种 CI 均包含 0；换成 A-A 并未增强该弱攻击者的聚合收益。
+- semi_transfer O-A 与 A-A 的下降分别为 15.535581 pp、13.108614 pp，dyadic CI 均远离 0。现有证据表明攻击者对匿名语音的适应能力是关键因素，不能把原始小幅下降归因于只评 O-A。
+- semi_transfer 使用 utterance-random 匿名训练语音，仍是迁移攻击者，不是充分适应 session-fixed 的攻击者；但其已经揭示较强风险。lazy A-A 的约 47% EER 不能用来证明对较强攻击者安全。
+- 分组 CI 条件于固定试验图和单一 reference mapping，不涵盖参考映射和模型训练随机性；数据范围仍限 Fisher Part 1/train-clean-360。当前结果不说明 SAAR 训练能改善，也没有验证内容/音质代价。
+- 建议进入小规模 SAAR MVP 的可微训练桥接验证与开发集实验，以较强 semi-transfer 攻击者辅助训练并保留独立攻击评估；先验证实际梯度到生成器和内容保真度，再决定扩大训练。不得通过重新分配测试参考或调节测试阈值优化结果；反复使用测试集调参的偏差应避免。
